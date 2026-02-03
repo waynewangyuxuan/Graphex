@@ -1,0 +1,28 @@
+# LLM
+anthropic>=0.18.0
+
+# PDF 处理
+pymupdf>=1.23.0
+
+# Chunking
+langchain-text-splitters>=0.0.1
+
+# 向量 (实体消歧用)
+chromadb>=0.4.0
+
+# 数据验证
+pydantic>=2.0.0
+
+# HTTP
+httpx>=0.25.0
+
+# 重试机制
+tenacity>=8.2.0
+
+# Development
+pytest>=8.0.0
+pytest-cov>=4.1.0
+pytest-asyncio>=0.23.0
+ruff>=0.1.0
+black>=24.0.0
+mypy>=1.8.0
