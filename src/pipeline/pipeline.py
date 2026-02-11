@@ -1,18 +1,19 @@
 """
 Main extraction pipeline.
+
+Supports multiple LLM providers through LiteLLM.
 """
 
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from anthropic import Anthropic
-
 from ..parsing.pdf_parser import PDFParser, ParsedDocument
 from ..chunking.chunker import Chunker
 from ..agents.entity_extractor import EntityExtractor
 from ..agents.relation_extractor import RelationExtractor
 from ..agents.validator import Validator
+from ..agents.base import DEFAULT_MODEL
 from ..schema.graph import KnowledgeGraph
 from ..schema.nodes import Node, NodeSource
 from ..schema.edges import Edge, EdgeSource
@@ -29,8 +30,12 @@ class PipelineConfig:
     chunk_size: int = 512
     chunk_overlap: int = 75
 
-    # LLM
-    model: str = "claude-sonnet-4-20250514"
+    # LLM (LiteLLM format)
+    # Examples:
+    #   - "gemini/gemini-2.0-flash" (Google Gemini)
+    #   - "claude-sonnet-4-20250514" (Anthropic Claude)
+    #   - "gpt-4o" (OpenAI GPT-4)
+    model: str = DEFAULT_MODEL
     max_tokens: int = 4096
 
     # Validation
@@ -43,22 +48,20 @@ class Pipeline:
     Knowledge extraction pipeline.
 
     Orchestrates the full workflow from document to knowledge graph.
+    Uses LiteLLM for LLM calls, supporting multiple providers.
     """
 
     def __init__(
         self,
         config: Optional[PipelineConfig] = None,
-        client: Optional[Anthropic] = None,
     ) -> None:
         """
         Initialize pipeline.
 
         Args:
             config: Pipeline configuration
-            client: Anthropic client (creates new if not provided)
         """
         self.config = config or PipelineConfig()
-        self.client = client or Anthropic()
 
         # Initialize components
         self.parser = PDFParser()
@@ -67,15 +70,12 @@ class Pipeline:
             chunk_overlap=self.config.chunk_overlap,
         )
         self.entity_extractor = EntityExtractor(
-            client=self.client,
             model=self.config.model,
         )
         self.relation_extractor = RelationExtractor(
-            client=self.client,
             model=self.config.model,
         )
         self.validator = Validator(
-            client=self.client,
             model=self.config.model,
         )
 

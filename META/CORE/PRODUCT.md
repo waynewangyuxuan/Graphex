@@ -76,7 +76,7 @@ An AI-assisted learning canvas that externalizes knowledge as interactive graphs
 - **Node Notes**: Main claims, evidence, personal questions, connections to prior knowledge
 - **Connection Notes**: Why relationship exists, strength of evidence, user's interpretation
 - **Note Templates**: Guided prompts—"Main claim:", "Evidence:", "How this connects to [other concept]:", "My question:"
-- **Anti-Verbatim Safeguards**: 
+- **Anti-Verbatim Safeguards**:
   - Character limits forcing summarization
   - Disable copy-paste from source documents
   - Prompts requiring "in your own words"
@@ -97,7 +97,7 @@ An AI-assisted learning canvas that externalizes knowledge as interactive graphs
 - User clicks connection between nodes
 - System prompts: "What do you think this relationship is? Why are these concepts connected?"
 - User types hypothesis (minimum 20 words)
-- AI then reveals: 
+- AI then reveals:
   - Original text supporting the connection
   - AI's explanation of relationship
   - Evaluation of user's hypothesis ("You identified X correctly, but consider Y...")

@@ -1,12 +1,20 @@
 """
 Base agent class for LLM-based extraction.
+
+Supports multiple LLM providers through LiteLLM.
 """
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Optional
 
-from anthropic import Anthropic
+from dotenv import load_dotenv
+import litellm
+
+# Load .env file from project root
+_env_path = Path(__file__).parent.parent.parent / ".env"
+load_dotenv(_env_path)
 
 
 @dataclass
@@ -19,30 +27,38 @@ class AgentResult:
     metrics: dict = field(default_factory=dict)
 
 
+# Default model - can use any LiteLLM supported model
+# Examples:
+#   - "gemini/gemini-2.0-flash" (Google Gemini 2.0 Flash)
+#   - "claude-sonnet-4-20250514" (Anthropic Claude)
+#   - "gpt-4o" (OpenAI GPT-4)
+DEFAULT_MODEL = "gemini/gemini-2.0-flash"
+
+
 class BaseAgent(ABC):
     """
     Base class for extraction agents.
 
-    Provides common LLM interaction patterns.
+    Provides common LLM interaction patterns using LiteLLM.
     """
 
     def __init__(
         self,
-        client: Optional[Anthropic] = None,
-        model: str = "claude-sonnet-4-20250514",
+        model: str = DEFAULT_MODEL,
         max_tokens: int = 4096,
+        **kwargs: Any,
     ) -> None:
         """
         Initialize agent.
 
         Args:
-            client: Anthropic client (creates new if not provided)
-            model: Model to use for extraction
+            model: LiteLLM model identifier (e.g., "gemini/gemini-2.0-flash")
             max_tokens: Max tokens in response
+            **kwargs: Additional arguments for litellm.completion
         """
-        self.client = client or Anthropic()
         self.model = model
         self.max_tokens = max_tokens
+        self.extra_params = kwargs
 
     @abstractmethod
     def get_system_prompt(self) -> str:
@@ -73,16 +89,22 @@ class BaseAgent(ABC):
             # Format the prompt
             user_prompt = self.format_input(**kwargs)
 
-            # Call LLM
-            response = self.client.messages.create(
+            # Build messages for LiteLLM (OpenAI format)
+            messages = [
+                {"role": "system", "content": self.get_system_prompt()},
+                {"role": "user", "content": user_prompt},
+            ]
+
+            # Call LLM through LiteLLM
+            response = litellm.completion(
                 model=self.model,
+                messages=messages,
                 max_tokens=self.max_tokens,
-                system=self.get_system_prompt(),
-                messages=[{"role": "user", "content": user_prompt}],
+                **self.extra_params,
             )
 
-            # Extract text content
-            response_text = response.content[0].text
+            # Extract text content (OpenAI format)
+            response_text = response.choices[0].message.content
 
             # Parse output
             output = self.parse_output(response_text)
@@ -91,8 +113,9 @@ class BaseAgent(ABC):
                 success=True,
                 output=output,
                 metrics={
-                    "input_tokens": response.usage.input_tokens,
-                    "output_tokens": response.usage.output_tokens,
+                    "input_tokens": response.usage.prompt_tokens,
+                    "output_tokens": response.usage.completion_tokens,
+                    "model": response.model,
                 },
             )
 

@@ -1,5 +1,6 @@
-# LLM
-anthropic>=0.18.0
+# LLM (LiteLLM for multi-provider support)
+litellm>=1.0.0
+# anthropic>=0.18.0  # Optional: direct Anthropic SDK
 
 # PDF 处理
 pymupdf>=1.23.0
