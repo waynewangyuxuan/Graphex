@@ -22,15 +22,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **MVP Node types**: 5 → 6 types (added `Method` for functions/operations) (2026-02-12)
-- **MVP Edge types**: 8 → 10 types (added `Enables`, `Prevents`, `Contrasts`) (2026-02-12)
+- **MVP Edge types**: 8 → 11 → 10 types (added `Enables`, `Prevents`, `Contrasts`; removed `RelatedTo`) (2026-02-12)
 - Clarified `Agent` type to exclude copyright/reference authors (2026-02-12)
-- Added `RelatedTo` usage guideline: should be <40% of total edges (2026-02-12)
+- **Edge extraction strategy**: If no specific type fits, DON'T create the edge (2026-02-12)
 
 ### Deprecated
 -
 
 ### Removed
--
+- **`RelatedTo` edge type** (2026-02-12): Too generic - nodes with edges are obviously related.
+  This "fallback" option led to lazy classification (76% usage in benchmark tests).
+  New strategy: quality over quantity, only create edges that can be precisely typed.
 
 ### Fixed
 -

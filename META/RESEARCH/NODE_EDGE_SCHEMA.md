@@ -216,11 +216,12 @@ EdgeTypes:
     example: "地球 NearTo 月球"
 
   # === 联想关系（Associative）===
-  RelatedTo:
-    description: "泛关联（类型不明确时使用）"
-    direction: "对称"
-    example: "咖啡 RelatedTo 早晨"
-    note: "仅在无法确定更具体关系时使用，应占比 <40%"
+  # NOTE: RelatedTo 已在 2026-02-12 从 MVP 中移除
+  # RelatedTo:
+  #   description: "泛关联（类型不明确时使用）"
+  #   direction: "对称"
+  #   example: "咖啡 RelatedTo 早晨"
+  #   note: "已移除 - 太泛化，如果无法分类则不创建边"
 
   SimilarTo:
     description: "相似"
@@ -380,14 +381,15 @@ MVP_EdgeTypes:
   - Contrasts  # 对比（2026-02-12 从完整版移入 MVP）
   - Supports   # 支持
   - Attacks    # 反驳
-  - RelatedTo  # 泛关联（兜底，应 <40% 使用率）
+  # NOTE: RelatedTo 已移除！如果无法分类，不创建边
 ```
 
 > **2026-02-12 变更说明**:
 > - 新增 `Enables`: 表示"A 使 B 成为可能"的关系，如 "氧气 Enables 燃烧"
 > - 新增 `Prevents`: 表示"A 阻止 B"的关系，如 "绝缘体 Prevents 导电"
 > - 移入 `Contrasts`: 表示对比关系，如 "有理数 Contrasts 无理数"
-> - 限制 `RelatedTo` 使用：Benchmark 测试显示过度使用 RelatedTo (76%)，应限制在 <40%
+> - **移除 `RelatedTo`**: 这个类型太泛化了——如果两个节点有边，它们当然是"相关的"。
+>   移除后，如果 LLM 无法确定具体关系类型，就不应该创建这条边。宁缺毋滥。
 
 ---
 

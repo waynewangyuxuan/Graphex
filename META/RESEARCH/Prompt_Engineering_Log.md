@@ -11,8 +11,11 @@
 | 日期 | 实验编号 | 目标 | 核心节点匹配率 | 状态 |
 |------|---------|------|---------------|------|
 | 2026-02-12 | EXP-001 | Baseline 评估 | 37.5% | ✅ 完成 |
-| - | EXP-002 | Entity Prompt 优化 | 目标 >70% | 🔜 待做 |
-| - | EXP-003 | Relation Prompt 优化 | 目标 RelatedTo <40% | 🔜 待做 |
+| 2026-02-12 | EXP-002 | 移除 RelatedTo | 目标: 精确边 100% | ✅ 完成 |
+| - | EXP-003 | Entity Prompt 优化 | 目标 >70% | 🔜 待做 |
+| - | EXP-004 | 添加 Few-Shot 负面示例 | 目标 噪声 <15% | 🔜 待做 |
+| - | EXP-005 | 实体类型引导关系选择 | 目标 精确度 +30% | 🔜 待做 |
+| - | EXP-006 | 两阶段抽取 | 目标 召回 +20% | 🔜 待做 |
 
 ---
 
@@ -140,14 +143,76 @@ You are an expert Relation Extraction Agent for knowledge graph construction.
 |--------|--------|---------|--------|
 | P0 | 添加噪声过滤规则到 Entity Prompt | 噪声 -80% | 低 |
 | P0 | 添加 Method 类型 | 召回 +20% | 低 |
-| P0 | 添加边类型选择指南 | RelatedTo <40% | 低 |
+| P0 | ~~添加边类型选择指南~~ → 移除 RelatedTo | 精确边 100% | 低 |
 | P1 | 添加重要性标注 | 支持分层 | 中 |
 | P1 | 添加全局文档理解 Pass | 召回 +15% | 中 |
 | P2 | 升级去重算法 | 重复 -90% | 中 |
 
 ---
 
-## EXP-002: Entity Prompt v0.2 (待执行)
+## EXP-002: 移除 RelatedTo 边类型 ✅
+
+**日期**: 2026-02-12
+
+**目标**: 消除泛化边类型，强制精确分类
+
+### 问题分析
+
+**核心观察**: 在 EXP-001 中，76% 的边被标记为 RelatedTo，而 Ground Truth 中只有 29%。
+更重要的是，用户指出了一个根本问题：
+
+> "RelatedTo 本身就太 general 了，所以 node 之间必然 related to each other"
+
+这句话揭示了 RelatedTo 的本质缺陷：
+1. **信息价值为零** - 如果两个节点之间有边，它们当然是"相关的"
+2. **懒惰分类的温床** - LLM 在不确定时会选择最安全的选项
+3. **违反知识图谱目的** - 知识图谱的价值在于揭示*具体*关系
+
+### 解决方案
+
+**方案**: 完全移除 RelatedTo，将 fallback 行为改为"不创建边"
+
+**修改文件**:
+1. `src/schema/edges.py` - 移除 `RELATED_TO` 枚举值
+2. `src/agents/relation_extractor.py`:
+   - 更新 prompt: 明确说明如果无法分类则不创建边
+   - 更新 `parse_output()`: 遇到未知类型时 skip 而不是 fallback
+
+**Prompt 关键修改**:
+```diff
+- ### 7. 都不是?
+- - 只有在以上都不适用时 → **RelatedTo**
+- - ⚠️ 如果选择 RelatedTo，必须在 reasoning 中解释为什么其他类型都不适用
+
++ ### 7. 都不是? → 不创建边!
++ - ⚠️ **重要**: 如果以上所有类型都不适用，**不要创建这条边**
++ - 原因: 两个节点之间必然存在某种关联(否则不会同时出现在文档中)，
++   但如果无法确定具体关系类型，这条边就没有信息价值
++ - **宁缺毋滥**: 只创建能明确分类的边
+```
+
+### 预期效果
+
+| 指标 | 修改前 | 预期 |
+|-----|-------|------|
+| RelatedTo 占比 | 76% | **0%** |
+| 边总数 | 可能较多 | 会减少，但更精确 |
+| 边质量 | 低（大量模糊边） | 高（每条边都有明确语义） |
+
+### 理论支持
+
+这个决策符合知识图谱设计的核心原则：
+- **语义明确性**: 边应该传达具体的语义关系
+- **信息增益**: 每条边都应该增加可用信息
+- **质量优于数量**: 10 条精确边 > 100 条模糊边
+
+### 状态
+
+✅ **已完成** (2026-02-12)
+
+---
+
+## EXP-003: Entity Prompt 优化 (待执行)
 
 **目标**:
 - 噪声节点率 <15%
@@ -211,13 +276,26 @@ DO NOT extract as entities:
 
 ---
 
-## EXP-003: Relation Prompt v0.2 (待执行)
+## EXP-004-006: 后续实验规划 (待执行)
 
-**目标**:
+### EXP-004: Few-Shot 负面示例
+**目标**: 噪声实体率 <15%
+
+### EXP-005: 实体类型引导关系选择
+**目标**: 边精确度 +30%
+
+### EXP-006: 两阶段抽取 (First-Pass + Chunk)
+**目标**: 核心节点召回率 +20%
+
+---
+
+## 旧版 Relation Prompt 参考 (已被 EXP-002 取代)
+
+**原目标**:
 - RelatedTo 占比 <40%
 - 核心边召回率 >60%
 
-**计划修改**:
+**原计划修改 (现已不适用)**:
 
 ```python
 SYSTEM_PROMPT_V02 = """You are an expert Relation Extraction Agent for knowledge graph construction.
@@ -299,13 +377,15 @@ SYSTEM_PROMPT_V02 = """You are an expert Relation Extraction Agent for knowledge
 - Proposition: 2
 - Agent: 2
 
-**边类型分布**:
+**边类型分布** (原 Ground Truth，含 RelatedTo):
 - PartOf: 4
 - Enables: 3
-- RelatedTo: 5
+- ~~RelatedTo: 5~~ (需重新标注为具体类型或移除)
 - Contrasts: 2
 - HasProperty: 2
 - Causes: 1
+
+> **Note**: Ground Truth 需要更新以移除 RelatedTo 边
 
 **核心节点** (8个):
 1. Condition Variable
