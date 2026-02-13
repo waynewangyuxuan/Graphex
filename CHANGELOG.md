@@ -14,9 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Milestone tracking system
 - ADR system for architectural decisions
 - CI/CD pipeline for Python
+- **Benchmark system** for evaluating extraction quality (2026-02-12)
+  - Ground Truth templates (`benchmark/templates/`)
+  - Ground Truth for 3 test documents (threads-cv, MiroThinker, threads-bugs)
+  - Pipeline diagnosis report (`benchmark/PIPELINE_DIAGNOSIS.md`)
+- **Prompt Engineering tracking** (`Meta/Research/Prompt_Engineering_Log.md`) (2026-02-12)
 
 ### Changed
--
+- **MVP Node types**: 5 → 6 types (added `Method` for functions/operations) (2026-02-12)
+- **MVP Edge types**: 8 → 10 types (added `Enables`, `Prevents`, `Contrasts`) (2026-02-12)
+- Clarified `Agent` type to exclude copyright/reference authors (2026-02-12)
+- Added `RelatedTo` usage guideline: should be <40% of total edges (2026-02-12)
 
 ### Deprecated
 -

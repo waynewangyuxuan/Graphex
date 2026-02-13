@@ -335,30 +335,44 @@ interface Edge {
 
 对于 MVP 阶段，建议使用简化的 schema：
 
-### 4.1 MVP Node 类型（5种）
+### 4.1 MVP Node 类型（6种）
 
 ```yaml
 MVP_NodeTypes:
-  - Concept    # 概念
+  - Concept    # 概念、理论、数据结构
+  - Method     # 操作、函数、API（2026-02-12 新增，解决 wait()/signal() 缺失问题）
   - Event      # 事件
-  - Agent      # 人/组织
-  - Claim      # 主张/论点
+  - Agent      # 人/组织（仅限对内容有实质贡献者）
+  - Claim      # 主张/论点/最佳实践
   - Fact       # 事实
 ```
 
-### 4.2 MVP Edge 类型（8种）
+> **2026-02-12 变更说明**:
+> - 新增 `Method` 类型：Benchmark 测试发现缺少此类型导致 wait(), signal() 等核心操作无法被正确提取
+> - 明确 `Agent` 仅包含对内容有贡献的人物，排除 copyright 作者和引用作者
+
+### 4.2 MVP Edge 类型（10种）
 
 ```yaml
 MVP_EdgeTypes:
   - IsA        # 类型归属
   - PartOf     # 部分整体
   - Causes     # 因果
+  - Enables    # 使能/促成（2026-02-12 新增）
+  - Prevents   # 阻止/预防（2026-02-12 新增）
   - Before     # 时间先后
   - HasProperty # 属性
+  - Contrasts  # 对比（2026-02-12 从完整版移入 MVP）
   - Supports   # 支持
   - Attacks    # 反驳
-  - RelatedTo  # 泛关联（兜底）
+  - RelatedTo  # 泛关联（兜底，应 <40% 使用率）
 ```
+
+> **2026-02-12 变更说明**:
+> - 新增 `Enables`: 表示"A 使 B 成为可能"的关系，如 Lock Enables Mutual Exclusion
+> - 新增 `Prevents`: 表示"A 阻止 B"的关系，如 Mutex Prevents Data Race
+> - 移入 `Contrasts`: 表示对比关系，如 Mesa Semantics Contrasts Hoare Semantics
+> - 限制 `RelatedTo` 使用：Benchmark 测试显示过度使用 RelatedTo (76%)，应限制在 <40%
 
 ---
 
