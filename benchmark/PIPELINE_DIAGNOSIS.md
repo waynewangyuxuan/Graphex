@@ -163,24 +163,32 @@ SYSTEM_PROMPT = """
 ## Relation Type Selection Guide (按场景)
 
 **结构关系:**
-- IsA: 当 A 是 B 的一种 (e.g., "Mesa Semantics" IsA "Condition Variable Semantics")
-- PartOf: 当 A 是 B 的组成部分 (e.g., "wait()" PartOf "Condition Variable")
+- IsA: 当 A 是 B 的一种
+  - 例: "正方形 IsA 多边形", "鲸鱼 IsA 哺乳动物"
+- PartOf: 当 A 是 B 的组成部分
+  - 例: "边 PartOf 三角形", "章节 PartOf 书籍"
 
 **因果关系:**
-- Causes: 当 A 导致 B 发生 (e.g., "Race Condition" Causes "Bug")
-- Enables: 当 A 使 B 成为可能 (e.g., "Lock" Enables "Mutual Exclusion")
-- Prevents: 当 A 阻止 B (新增)
+- Causes: 当 A 导致 B 发生
+  - 例: "加热 Causes 水沸腾", "地震 Causes 海啸"
+- Enables: 当 A 使 B 成为可能
+  - 例: "氧气 Enables 燃烧", "语言 Enables 沟通"
+- Prevents: 当 A 阻止 B
+  - 例: "绝缘体 Prevents 导电", "疫苗 Prevents 感染"
 
 **对比关系:**
-- Contrasts: 当 A 和 B 是对立或对比 (e.g., "Mesa Semantics" Contrasts "Hoare Semantics")
+- Contrasts: 当 A 和 B 是对立或对比
+  - 例: "有理数 Contrasts 无理数", "酸 Contrasts 碱"
 
 **属性关系:**
-- HasProperty: 当 B 是 A 的特征 (e.g., "Condition Variable" HasProperty "Atomicity")
+- HasProperty: 当 B 是 A 的特征
+  - 例: "正方形 HasProperty 四条等边", "质数 HasProperty 只能被1和自身整除"
 
 **⚠️ RelatedTo 使用限制:**
 只在以下情况使用 RelatedTo:
 - 确实无法归类到上述任何类型
 - 关系非常模糊
+- 例: "咖啡 RelatedTo 早晨" (关联但无明确因果/结构关系)
 
 如果选择 RelatedTo，必须解释为什么其他类型都不适用。
 """

@@ -227,33 +227,47 @@ SYSTEM_PROMPT_V02 = """You are an expert Relation Extraction Agent for knowledge
 问自己以下问题来选择正确的边类型:
 
 ### 1. 是结构关系吗?
-- A 是 B 的一种? → **IsA** (e.g., "Mesa Semantics IsA Condition Variable Semantics")
-- A 是 B 的一部分? → **PartOf** (e.g., "wait() PartOf Condition Variable API")
+- A 是 B 的一种? → **IsA**
+  - 例: "正方形 IsA 多边形", "鲸鱼 IsA 哺乳动物"
+- A 是 B 的一部分? → **PartOf**
+  - 例: "边 PartOf 三角形", "章节 PartOf 书籍", "心脏 PartOf 人体"
 - A 包含 B? → **HasPart** (PartOf 的反向)
+  - 例: "汽车 HasPart 引擎"
 
 ### 2. 是因果/使能关系吗?
-- A 导致 B 发生? → **Causes** (e.g., "Race Condition Causes Bug")
-- A 使 B 成为可能? → **Enables** (e.g., "Lock Enables Mutual Exclusion")
-- A 阻止 B? → **Prevents** (e.g., "Mutex Prevents Data Race")
+- A 导致 B 发生? → **Causes**
+  - 例: "加热 Causes 水沸腾", "地震 Causes 海啸"
+- A 使 B 成为可能? → **Enables**
+  - 例: "氧气 Enables 燃烧", "语言 Enables 沟通"
+- A 阻止 B? → **Prevents**
+  - 例: "疫苗 Prevents 感染", "绝缘体 Prevents 导电"
 
 ### 3. 是对比关系吗?
-- A 和 B 是对立/对比概念? → **Contrasts** (e.g., "Mesa Semantics Contrasts Hoare Semantics")
+- A 和 B 是对立/对比概念? → **Contrasts**
+  - 例: "有理数 Contrasts 无理数", "酸 Contrasts 碱"
 - A 和 B 相似? → **SimilarTo**
+  - 例: "椭圆 SimilarTo 圆"
 
 ### 4. 是属性关系吗?
-- B 是 A 的特征/属性? → **HasProperty** (e.g., "wait() HasProperty Atomicity")
+- B 是 A 的特征/属性? → **HasProperty**
+  - 例: "正方形 HasProperty 四条等边", "质数 HasProperty 只能被1和自身整除"
 
 ### 5. 是时间关系吗?
 - A 发生在 B 之前? → **Before**
+  - 例: "文艺复兴 Before 工业革命"
 - A 发生在 B 之后? → **After**
+  - 例: "二战 After 一战"
 
 ### 6. 是论证关系吗?
 - A 支持/证明 B? → **Supports**
+  - 例: "化石证据 Supports 进化论"
 - A 反驳/反对 B? → **Attacks**
+  - 例: "反例 Attacks 假说"
 
 ### 7. 都不是?
 - 只有在以上都不适用时 → **RelatedTo**
 - ⚠️ 如果选择 RelatedTo，必须在 annotation 中解释为什么其他类型都不适用
+- 例: "咖啡 RelatedTo 早晨" (关联但无明确因果/结构关系)
 
 ## 输出示例
 

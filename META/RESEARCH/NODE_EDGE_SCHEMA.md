@@ -118,146 +118,161 @@ EdgeTypes:
   IsA:
     description: "类型归属"
     direction: "有向"
-    example: "狗 IsA 哺乳动物"
+    example: "正方形 IsA 多边形"
+    more_examples: ["鲸鱼 IsA 哺乳动物", "质数 IsA 整数"]
     inverse: "HasInstance"
 
   InstanceOf:
     description: "实例关系"
     direction: "有向"
-    example: "Fido InstanceOf 狗"
+    example: "π InstanceOf 无理数"
+    more_examples: ["地球 InstanceOf 行星"]
     inverse: "HasInstance"
 
   SubclassOf:
     description: "子类关系"
     direction: "有向"
-    example: "哺乳动物 SubclassOf 动物"
+    example: "哺乳动物 SubclassOf 脊椎动物"
+    more_examples: ["整数 SubclassOf 有理数"]
     inverse: "HasSubclass"
 
   # === 构成关系（Compositional）===
   PartOf:
     description: "部分-整体关系"
     direction: "有向"
-    example: "引擎 PartOf 汽车"
+    example: "边 PartOf 三角形"
+    more_examples: ["章节 PartOf 书籍", "心脏 PartOf 人体"]
     inverse: "HasPart"
 
   MemberOf:
     description: "成员关系"
     direction: "有向"
-    example: "员工 MemberOf 公司"
+    example: "2 MemberOf 偶数集合"
+    more_examples: ["员工 MemberOf 公司"]
     inverse: "HasMember"
 
   MadeOf:
     description: "材质构成"
     direction: "有向"
-    example: "桌子 MadeOf 木头"
+    example: "水分子 MadeOf 氢原子+氧原子"
+    more_examples: ["桌子 MadeOf 木头"]
 
   # === 属性关系（Attributive）===
   HasProperty:
     description: "具有属性"
     direction: "有向"
-    example: "冰 HasProperty 冷"
+    example: "正方形 HasProperty 四条等边"
+    more_examples: ["质数 HasProperty 只能被1和自身整除", "圆 HasProperty 无穷对称轴"]
 
   HasAttribute:
     description: "具有特征"
     direction: "有向"
-    example: "人 HasAttribute 身高"
+    example: "三角形 HasAttribute 三个内角和为180°"
 
   # === 因果关系（Causal）===
   Causes:
     description: "导致、引起"
     direction: "有向"
-    example: "下雨 Causes 路滑"
+    example: "加热 Causes 水沸腾"
+    more_examples: ["地震 Causes 海啸", "除以零 Causes 未定义"]
 
   Enables:
     description: "使能、促成"
     direction: "有向"
-    example: "钥匙 Enables 开门"
+    example: "氧气 Enables 燃烧"
+    more_examples: ["语言 Enables 沟通", "公理 Enables 推导定理"]
 
   Prevents:
     description: "阻止、预防"
     direction: "有向"
-    example: "疫苗 Prevents 感染"
+    example: "绝缘体 Prevents 导电"
+    more_examples: ["疫苗 Prevents 感染"]
 
   # === 时间关系（Temporal）===
   Before:
     description: "时间上先于"
     direction: "有向"
-    example: "事件A Before 事件B"
+    example: "文艺复兴 Before 工业革命"
 
   After:
     description: "时间上后于"
     direction: "有向"
-    example: "事件B After 事件A"
+    example: "二战 After 一战"
 
   During:
     description: "在...期间"
     direction: "有向"
-    example: "事件A During 事件B"
+    example: "经济大萧条 During 两次世界大战之间"
 
   # === 空间关系（Spatial）===
   LocatedAt:
     description: "位于"
     direction: "有向"
-    example: "埃菲尔铁塔 LocatedAt 巴黎"
+    example: "金字塔 LocatedAt 埃及"
 
   NearTo:
     description: "邻近"
     direction: "对称"
-    example: "咖啡店 NearTo 书店"
+    example: "地球 NearTo 月球"
 
   # === 联想关系（Associative）===
   RelatedTo:
     description: "泛关联（类型不明确时使用）"
     direction: "对称"
     example: "咖啡 RelatedTo 早晨"
-    note: "仅在无法确定更具体关系时使用"
+    note: "仅在无法确定更具体关系时使用，应占比 <40%"
 
   SimilarTo:
     description: "相似"
     direction: "对称"
-    example: "猫 SimilarTo 老虎"
+    example: "椭圆 SimilarTo 圆"
+    more_examples: ["菱形 SimilarTo 正方形"]
 
   Synonym:
     description: "同义"
     direction: "对称"
-    example: "car Synonym automobile"
+    example: "函数 Synonym 映射"
 
   Antonym:
     description: "反义"
     direction: "对称"
-    example: "热 Antonym 冷"
+    example: "有理数 Antonym 无理数"
+    more_examples: ["酸 Antonym 碱", "正数 Antonym 负数"]
 
   # === 论证关系（Argumentative）===
   Supports:
     description: "支持"
     direction: "有向"
-    example: "证据A Supports 主张B"
+    example: "化石证据 Supports 进化论"
 
   Attacks:
     description: "反驳"
     direction: "有向"
-    example: "反例 Attacks 主张"
+    example: "反例 Attacks 假说"
+    more_examples: ["黑天鹅 Attacks '所有天鹅都是白的'"]
 
   Qualifies:
     description: "限定条件"
     direction: "有向"
-    example: "条件 Qualifies 主张"
+    example: "'在真空中' Qualifies '光速恒定'"
 
   # === 话语关系（Discourse）===
   Elaborates:
     description: "展开说明"
     direction: "有向"
-    example: "句子B Elaborates 句子A"
+    example: "定理证明 Elaborates 定理陈述"
 
   Contrasts:
     description: "对比"
     direction: "有向"
-    example: "观点A Contrasts 观点B"
+    example: "有理数 Contrasts 无理数"
+    more_examples: ["古典力学 Contrasts 量子力学", "酸 Contrasts 碱"]
 
   Exemplifies:
     description: "举例说明"
     direction: "有向"
-    example: "例子 Exemplifies 概念"
+    example: "π Exemplifies 无理数"
+    more_examples: ["勾股定理 Exemplifies 几何定理"]
 ```
 
 ### 2.2 Edge 数据结构
@@ -369,9 +384,9 @@ MVP_EdgeTypes:
 ```
 
 > **2026-02-12 变更说明**:
-> - 新增 `Enables`: 表示"A 使 B 成为可能"的关系，如 Lock Enables Mutual Exclusion
-> - 新增 `Prevents`: 表示"A 阻止 B"的关系，如 Mutex Prevents Data Race
-> - 移入 `Contrasts`: 表示对比关系，如 Mesa Semantics Contrasts Hoare Semantics
+> - 新增 `Enables`: 表示"A 使 B 成为可能"的关系，如 "氧气 Enables 燃烧"
+> - 新增 `Prevents`: 表示"A 阻止 B"的关系，如 "绝缘体 Prevents 导电"
+> - 移入 `Contrasts`: 表示对比关系，如 "有理数 Contrasts 无理数"
 > - 限制 `RelatedTo` 使用：Benchmark 测试显示过度使用 RelatedTo (76%)，应限制在 <40%
 
 ---
