@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Ground Truth for 3 test documents (threads-cv, MiroThinker, threads-bugs)
   - Pipeline diagnosis report (`benchmark/PIPELINE_DIAGNOSIS.md`)
 - **Prompt Engineering tracking** (`Meta/Research/Prompt_Engineering_Log.md`) (2026-02-12)
+- **Three-Phase Enhanced Pipeline** (2026-02-12)
+  - `FirstPassAgent`: Document understanding (identifies teachable concepts)
+  - `GroundingVerifier`: Filters entities without proper grounding
+  - `EnhancedPipeline`: Orchestrates the three-phase approach
+  - Solves the "filename extraction" problem by distinguishing "mentioned" vs "taught"
 
 ### Changed
 - **MVP Node types**: 5 → 6 types (added `Method` for functions/operations) (2026-02-12)

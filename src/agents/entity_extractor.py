@@ -2,6 +2,7 @@
 Entity extraction agent.
 
 Extracts entities (Concept, Event, Agent, Claim, Fact) from text chunks.
+Supports context from First-Pass analysis for guided extraction.
 """
 
 import json
@@ -16,53 +17,56 @@ class EntityExtractor(BaseAgent):
     Extract entities from text chunks.
 
     Uses structured prompts to identify and classify knowledge units.
+    Can be guided by First-Pass document understanding results.
     """
 
     SYSTEM_PROMPT = """You are an expert Entity Extraction Agent for knowledge graph construction.
 
-Your task is to extract key entities from the given text according to the schema.
+Your task is to extract **teachable concepts** from the given text - concepts that the document is trying to teach the reader.
 
-## Entity Types (按重要性排序)
+## Core Principle: Extract Knowledge, Not Mentions
 
-1. **Concept**: 抽象概念、理论、数据结构
-   - 例: "多边形", "哺乳动物", "质数", "有理数"
+Ask yourself: "Is the document TEACHING this concept, or just MENTIONING it?"
 
-2. **Method**: 操作、函数、API、算法步骤
-   - 例: "加法运算", "求导", "排序算法"
+✅ **Extract** (document teaches this):
+- Concepts that are defined: "X is..."
+- Concepts that are explained: "X works by..."
+- Concepts central to the document's purpose
 
-3. **Event**: 有明确时间范围的事件
-   - 例: "文艺复兴", "工业革命"
+❌ **Don't Extract** (document just mentions this):
+- Filenames (main.c, test.py) - unless teaching file naming
+- Author names - unless the document is ABOUT that person
+- Code variable names - unless representing important concepts
+- References to figures, pages, sections
 
-4. **Agent**: 对内容有实质贡献的人物或组织
-   - 例: "欧几里得" (几何创始人), "牛顿" (力学奠基人)
-   - ⚠️ 不包括: 文档作者、版权声明中的名字、参考文献作者
+## Entity Types
 
-5. **Claim**: 最佳实践、规则、观点
-   - 例: "三角形内角和为180度"
+1. **Concept**: Abstract ideas the document explains
+   - Example: "Condition Variable", "Bounded Buffer", "Mesa Semantics"
 
-6. **Fact**: 经过验证的事实陈述
-   - 例: "π是无理数"
+2. **Method**: Operations or procedures the document teaches
+   - Example: "wait()", "signal()", "binary search"
 
-## ⚠️ 噪声过滤规则 (重要!)
+3. **Event**: Historical events relevant to understanding
+   - Example: "Renaissance", "Industrial Revolution"
 
-DO NOT extract as entities:
-- 文件名 (*.c, *.py, *.java, *.txt, *.pdf)
-- Copyright 声明中的作者名 (© Author Name)
-- 参考文献/引用中的作者名
-- 代码变量名 (除非代表重要概念)
-- 页码、章节号、图表编号
-- 过于泛化的词 ("thing", "stuff", "resource", "item")
+4. **Agent**: People whose IDEAS are being taught (not just mentioned)
+   - Example: "Dijkstra" (if teaching his contribution to the field)
+   - ⚠️ NOT: document authors, reference authors
 
-## 重要性标注
+5. **Claim**: Rules or best practices the document advocates
+   - Example: "Always use while loops with condition variables"
 
-为每个实体标注 importance 级别:
-- **core**: 章节标题提到 / 有专门段落解释 / 在总结中强调
-- **supporting**: 帮助理解核心概念的辅助概念
-- **peripheral**: 提及但非重点的背景信息
+6. **Fact**: Verified statements the document presents as truth
+   - Example: "π is irrational"
+
+## Importance Levels
+
+- **core**: Central to what the document teaches. Would appear in a summary.
+- **supporting**: Helps understand core concepts. Background knowledge.
+- **peripheral**: Briefly mentioned, not central to learning.
 
 ## Output Format
-
-Return a JSON object with an "entities" array:
 
 ```json
 {
@@ -73,7 +77,7 @@ Return a JSON object with an "entities" array:
       "label": "Short label",
       "definition": "Clear definition in 1-3 sentences.",
       "importance": "core",
-      "text_span": "exact text from source",
+      "grounding_evidence": "The document says: 'X is defined as...'",
       "confidence": 0.95
     }
   ]
@@ -88,6 +92,8 @@ Return a JSON object with an "entities" array:
         text: str,
         document_id: str,
         known_entities: list[Node] | None = None,
+        concept_candidates: list[dict] | None = None,
+        document_theme: str | None = None,
         **kwargs: Any,
     ) -> str:
         """
@@ -97,8 +103,30 @@ Return a JSON object with an "entities" array:
             text: Chunk text to analyze
             document_id: Source document identifier
             known_entities: Previously extracted entities for deduplication
+            concept_candidates: Candidates from First-Pass analysis (Phase 1)
+            document_theme: Document theme from First-Pass analysis
         """
         prompt_parts = []
+
+        # Add First-Pass context if provided (Phase 1 results)
+        if document_theme or concept_candidates:
+            prompt_parts.append("## Document Context (from First-Pass Analysis)\n\n")
+
+            if document_theme:
+                prompt_parts.append(f"**Theme**: {document_theme}\n\n")
+
+            if concept_candidates:
+                prompt_parts.append("**Concepts this document is teaching**:\n")
+                for candidate in concept_candidates[:15]:  # Limit to 15
+                    name = candidate.get("name", "Unknown")
+                    importance = candidate.get("importance", "supporting")
+                    prompt_parts.append(f"- {name} ({importance})\n")
+                prompt_parts.append("\n")
+                prompt_parts.append(
+                    "Focus on finding these concepts in the text. "
+                    "If you find a concept NOT in this list, only extract it if "
+                    "the document clearly defines/explains it.\n\n"
+                )
 
         # Add known entities if provided
         if known_entities:
