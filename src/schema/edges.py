@@ -12,9 +12,9 @@ MVP Edge Types (10):
 - Contrasts: Opposition/comparison (有理数 Contrasts 无理数)
 - Supports: Argumentation support (化石证据 Supports 进化论)
 - Attacks: Argumentation attack (反例 Attacks 假说)
-- RelatedTo: Generic association (fallback, should be <40% usage)
 
 Updated: 2026-02-12 - Added Enables, Prevents, Contrasts based on benchmark testing
+Updated: 2026-02-12 - REMOVED RelatedTo (too generic, provides no information value)
 """
 
 from enum import Enum
@@ -50,8 +50,10 @@ class EdgeType(str, Enum):
     SUPPORTS = "Supports"
     ATTACKS = "Attacks"
 
-    # Associative (fallback - should be <40% of total edges)
-    RELATED_TO = "RelatedTo"
+    # NOTE: RelatedTo was REMOVED on 2026-02-12
+    # Reason: Too generic - if two nodes have an edge, they are obviously related.
+    # This forced "fallback" option led to lazy classification (76% usage in tests).
+    # Now: If no specific relation fits, DON'T create an edge.
 
 
 class ExtractionMethod(str, Enum):

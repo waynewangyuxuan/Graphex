@@ -59,18 +59,20 @@ Your task is to identify relationships between the provided entities based on th
 - A 反驳/反对 B? → **Attacks**
   - 例: "反例 Attacks 假说"
 
-### 7. 都不是?
-- 只有在以上都不适用时 → **RelatedTo**
-- ⚠️ 如果选择 RelatedTo，必须在 reasoning 中解释为什么其他类型都不适用
-- 例: "咖啡 RelatedTo 早晨" (关联但无明确因果/结构关系)
+### 7. 都不是? → 不创建边!
+- ⚠️ **重要**: 如果以上所有类型都不适用，**不要创建这条边**
+- 原因: 两个节点之间必然存在某种关联(否则不会同时出现在文档中)，
+  但如果无法确定具体关系类型，这条边就没有信息价值
+- **宁缺毋滥**: 只创建能明确分类的边
 
 ## Guidelines
 
 1. Only create relations between entities in the provided list
 2. Use the source text to justify each relation
 3. Assign confidence based on how explicit the relation is
-4. **Strongly prefer specific types over RelatedTo** - RelatedTo should be <40% of relations
+4. **Only create edges with specific types** - if no type fits, DON'T create the edge
 5. Include evidence text and reasoning for each relation
+6. Quality over quantity: fewer precise edges > many vague edges
 
 ## Output Format
 
@@ -152,11 +154,12 @@ Your task is to identify relationships between the provided entities based on th
         for relation in relations:
             try:
                 # Map string type to EdgeType enum
-                edge_type_str = relation.get("type", "RelatedTo")
+                edge_type_str = relation.get("type", "")
                 try:
                     edge_type = EdgeType(edge_type_str)
                 except ValueError:
-                    edge_type = EdgeType.RELATED_TO
+                    # Skip edges with invalid/unknown types (no fallback to RelatedTo)
+                    continue
 
                 edge = Edge(
                     id=relation.get("id", f"rel_{len(edges):04d}"),

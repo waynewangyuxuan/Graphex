@@ -210,24 +210,6 @@ def test_pdf_comparison():
     graph.to_json(output_path)
     print(f"\nSaved to: {output_path}")
 
-    # Compare with previous results
-    old_path = Path("examples/output/threads-cv_graph.json")
-    if old_path.exists():
-        print(f"\n## Comparison with Previous Extraction")
-        old_graph = KnowledgeGraph.from_json(old_path)
-        old_results = analyze_graph(old_graph, "Previous")
-
-        print(f"\n  Nodes: {old_results['total_nodes']} → {results['total_nodes']}")
-        print(f"  Edges: {old_results['total_edges']} → {results['total_edges']}")
-        print(f"  RelatedTo%: {old_results['related_to_pct']:.1f}% → {results['related_to_pct']:.1f}%")
-
-        if 'Method' in results['node_types']:
-            print(f"  ✓ New: Method nodes = {results['node_types']['Method']}")
-
-        new_edge_types = set(results['edge_types'].keys()) - set(old_results['edge_types'].keys())
-        if new_edge_types:
-            print(f"  ✓ New edge types: {', '.join(new_edge_types)}")
-
     return results
 
 
