@@ -23,28 +23,56 @@ class RelationExtractor(BaseAgent):
 
 Your task is to identify relationships between the provided entities based on the source text.
 
-## Relation Types
+## 边类型选择决策树
 
-- **IsA**: Type attribution (e.g., "Dog IsA Mammal")
-- **PartOf**: Part-whole relation (e.g., "Engine PartOf Car")
-- **Causes**: Causation (e.g., "Rain Causes WetRoad")
-- **Before**: Temporal ordering (e.g., "EventA Before EventB")
-- **HasProperty**: Attribute (e.g., "Ice HasProperty Cold")
-- **Supports**: Evidence supports claim (e.g., "Data Supports Hypothesis")
-- **Attacks**: Contradicts or refutes (e.g., "CounterExample Attacks Theory")
-- **RelatedTo**: Generic association (use only when no specific relation applies)
+问自己以下问题来选择正确的边类型:
+
+### 1. 是结构关系吗?
+- A 是 B 的一种? → **IsA**
+  - 例: "正方形 IsA 多边形", "鲸鱼 IsA 哺乳动物"
+- A 是 B 的一部分? → **PartOf**
+  - 例: "边 PartOf 三角形", "章节 PartOf 书籍"
+
+### 2. 是因果/使能关系吗?
+- A 导致 B 发生? → **Causes**
+  - 例: "加热 Causes 水沸腾", "地震 Causes 海啸"
+- A 使 B 成为可能? → **Enables**
+  - 例: "氧气 Enables 燃烧", "语言 Enables 沟通"
+- A 阻止 B? → **Prevents**
+  - 例: "绝缘体 Prevents 导电", "疫苗 Prevents 感染"
+
+### 3. 是对比关系吗?
+- A 和 B 是对立/对比概念? → **Contrasts**
+  - 例: "有理数 Contrasts 无理数", "酸 Contrasts 碱"
+
+### 4. 是属性关系吗?
+- B 是 A 的特征/属性? → **HasProperty**
+  - 例: "正方形 HasProperty 四条等边", "质数 HasProperty 只能被1和自身整除"
+
+### 5. 是时间关系吗?
+- A 发生在 B 之前? → **Before**
+  - 例: "文艺复兴 Before 工业革命"
+
+### 6. 是论证关系吗?
+- A 支持/证明 B? → **Supports**
+  - 例: "化石证据 Supports 进化论"
+- A 反驳/反对 B? → **Attacks**
+  - 例: "反例 Attacks 假说"
+
+### 7. 都不是?
+- 只有在以上都不适用时 → **RelatedTo**
+- ⚠️ 如果选择 RelatedTo，必须在 reasoning 中解释为什么其他类型都不适用
+- 例: "咖啡 RelatedTo 早晨" (关联但无明确因果/结构关系)
 
 ## Guidelines
 
 1. Only create relations between entities in the provided list
 2. Use the source text to justify each relation
-3. Assign confidence based on how explicit the relation is in the text
-4. Prefer specific relation types over RelatedTo
-5. Include the evidence text span for each relation
+3. Assign confidence based on how explicit the relation is
+4. **Strongly prefer specific types over RelatedTo** - RelatedTo should be <40% of relations
+5. Include evidence text and reasoning for each relation
 
 ## Output Format
-
-Return a JSON object with a "relations" array:
 
 ```json
 {
@@ -53,9 +81,10 @@ Return a JSON object with a "relations" array:
       "id": "rel_001",
       "source_id": "entity_001",
       "target_id": "entity_002",
-      "type": "Causes",
+      "type": "PartOf",
       "confidence": 0.9,
-      "evidence": "text span showing the relation"
+      "evidence": "text span showing the relation",
+      "reasoning": "Why this type was chosen"
     }
   ]
 }

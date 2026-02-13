@@ -1,12 +1,15 @@
 """
 Node schema definitions for knowledge graph.
 
-MVP Node Types (5):
-- Concept: Abstract concepts or categories
+MVP Node Types (6):
+- Concept: Abstract concepts, theories, data structures
+- Method: Operations, functions, APIs, algorithms
 - Event: Things that happen with start/end time
-- Agent: Conscious actors (people, organizations)
-- Claim: Propositions that can be true/false
+- Agent: People/organizations who contributed to the content (NOT copyright/reference authors)
+- Claim: Propositions, best practices, rules
 - Fact: Verified factual statements
+
+Updated: 2026-02-12 - Added Method type based on benchmark testing
 """
 
 from enum import Enum
@@ -19,6 +22,7 @@ class NodeType(str, Enum):
     """MVP node types based on cognitive science research."""
 
     CONCEPT = "Concept"
+    METHOD = "Method"  # Added 2026-02-12: for operations like wait(), signal()
     EVENT = "Event"
     AGENT = "Agent"
     CLAIM = "Claim"

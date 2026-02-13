@@ -1,15 +1,20 @@
 """
 Edge schema definitions for knowledge graph.
 
-MVP Edge Types (8):
-- IsA: Type attribution (Dog IsA Mammal)
-- PartOf: Part-whole relation (Engine PartOf Car)
-- Causes: Causation (Rain Causes WetRoad)
-- Before: Temporal ordering (EventA Before EventB)
-- HasProperty: Attribute (Ice HasProperty Cold)
-- Supports: Argumentation support (Evidence Supports Claim)
-- Attacks: Argumentation attack (CounterExample Attacks Claim)
-- RelatedTo: Generic association (fallback)
+MVP Edge Types (10):
+- IsA: Type attribution (正方形 IsA 多边形)
+- PartOf: Part-whole relation (边 PartOf 三角形)
+- Causes: Causation (加热 Causes 水沸腾)
+- Enables: Makes possible (氧气 Enables 燃烧)
+- Prevents: Blocks/stops (绝缘体 Prevents 导电)
+- Before: Temporal ordering (文艺复兴 Before 工业革命)
+- HasProperty: Attribute (正方形 HasProperty 四条等边)
+- Contrasts: Opposition/comparison (有理数 Contrasts 无理数)
+- Supports: Argumentation support (化石证据 Supports 进化论)
+- Attacks: Argumentation attack (反例 Attacks 假说)
+- RelatedTo: Generic association (fallback, should be <40% usage)
+
+Updated: 2026-02-12 - Added Enables, Prevents, Contrasts based on benchmark testing
 """
 
 from enum import Enum
@@ -29,6 +34,8 @@ class EdgeType(str, Enum):
 
     # Causal
     CAUSES = "Causes"
+    ENABLES = "Enables"    # Added 2026-02-12
+    PREVENTS = "Prevents"  # Added 2026-02-12
 
     # Temporal
     BEFORE = "Before"
@@ -36,11 +43,14 @@ class EdgeType(str, Enum):
     # Attributive
     HAS_PROPERTY = "HasProperty"
 
+    # Discourse
+    CONTRASTS = "Contrasts"  # Added 2026-02-12
+
     # Argumentative
     SUPPORTS = "Supports"
     ATTACKS = "Attacks"
 
-    # Associative (fallback)
+    # Associative (fallback - should be <40% of total edges)
     RELATED_TO = "RelatedTo"
 
 
