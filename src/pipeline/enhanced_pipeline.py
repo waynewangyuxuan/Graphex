@@ -1,9 +1,10 @@
 """
-Enhanced extraction pipeline with three-phase approach.
+Enhanced extraction pipeline with four-phase approach.
 
 Phase 1: First-Pass - Document understanding
-Phase 2: Chunk Extraction - Guided by First-Pass results
+Phase 2: Chunk Extraction - Guided by First-Pass results (with optional Gleaning)
 Phase 3: Grounding Verification - Filter ungrounded entities
+Phase 4: Entity Resolution - Merge duplicate entities via description aggregation
 
 This pipeline addresses the core problem: LLM extracting "mentions" instead of "knowledge".
 """
@@ -11,6 +12,8 @@ This pipeline addresses the core problem: LLM extracting "mentions" instead of "
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+
+import litellm
 
 from ..parsing.pdf_parser import PDFParser, ParsedDocument
 from ..chunking.chunker import Chunker
@@ -47,22 +50,32 @@ class EnhancedPipelineConfig:
     enable_grounding_verification: bool = True
     grounding_min_confidence: float = 0.6
 
+    # Gleaning (Phase 2 enhancement)
+    max_gleanings: int = 1  # Adjustable; each round ~2x token cost for that chunk
+    glean_chunk_token_threshold: int = 500  # Only glean chunks longer than this
+
+    # Entity Resolution (Phase 4)
+    enable_entity_resolution: bool = True
+
     # Validation
     confidence_threshold: float = 0.7
 
 
 class EnhancedPipeline:
     """
-    Three-phase knowledge extraction pipeline.
+    Four-phase knowledge extraction pipeline.
 
     Phase 1 (First-Pass): Understand what the document is trying to teach
-    Phase 2 (Extraction): Extract entities guided by Phase 1 results
+    Phase 2 (Extraction): Extract entities guided by Phase 1 results + Gleaning
     Phase 3 (Verification): Filter out entities that aren't grounded
+    Phase 4 (Resolution): Merge duplicate entities via description aggregation
 
     This approach solves the "filename extraction" problem by:
     1. First-Pass identifies "Condition Variable" as teachable, not "main.c"
     2. Extraction is guided to focus on teachable concepts
-    3. Verification filters out anything without proper grounding
+    3. Gleaning catches missed entities in dense chunks (max_gleanings rounds)
+    4. Verification filters out anything without proper grounding
+    5. Resolution merges cross-chunk duplicates and enriches descriptions
     """
 
     def __init__(
@@ -169,6 +182,25 @@ class EnhancedPipeline:
                     continue
 
                 entities: list[Node] = entity_result.output or []
+
+                # Gleaning: catch missed entities in long chunks
+                approx_tokens = len(chunk.text) // 4
+                if self.config.max_gleanings > 0 and approx_tokens > self.config.glean_chunk_token_threshold:
+                    for glean_round in range(self.config.max_gleanings):
+                        additional = self._run_gleaning(
+                            chunk_text=chunk.text,
+                            existing_entities=entities,
+                            doc_id=doc.document_id,
+                            concept_candidates=document_understanding.concept_candidates,
+                            document_theme=document_understanding.theme,
+                        )
+                        if not additional:
+                            break
+                        state.log(
+                            f"  Gleaning round {glean_round + 1}: +{len(additional)} entities"
+                        )
+                        entities.extend(additional)
+
                 all_entities.extend(entities)
 
                 # Register entities AND add to graph
@@ -229,6 +261,17 @@ class EnhancedPipeline:
             for entity in verified_entities:
                 if entity.id not in state.graph.nodes:
                     state.graph.add_node(entity)
+
+            # ===== PHASE 4: Entity Resolution =====
+            if self.config.enable_entity_resolution and len(state.graph.nodes) > 1:
+                state.log("=== Phase 4: Entity Resolution ===")
+                before_count = len(state.graph.nodes)
+                self._run_entity_resolution(state.graph, state)
+                after_count = len(state.graph.nodes)
+                state.log(
+                    f"Entity resolution: {before_count} → {after_count} nodes "
+                    f"({before_count - after_count} merged)"
+                )
 
             # Validation
             state.log("Validating extractions...")
@@ -364,6 +407,153 @@ class EnhancedPipeline:
         ]
         for edge_id in edges_to_remove:
             del graph.edges[edge_id]
+
+    def _run_gleaning(
+        self,
+        chunk_text: str,
+        existing_entities: list[Node],
+        doc_id: str,
+        concept_candidates: list[dict],
+        document_theme: str,
+    ) -> list[Node]:
+        """
+        Run one gleaning round: ask LLM for entities missed in the first pass.
+
+        Shows the already-extracted entity list so the LLM focuses on NEW ones.
+
+        Args:
+            chunk_text: The chunk being processed
+            existing_entities: Entities already extracted from this chunk
+            doc_id: Document ID for source attribution
+            concept_candidates: First-Pass concept candidates (for context)
+            document_theme: Document theme (for context)
+
+        Returns:
+            Additional entities found (may be empty)
+        """
+        if not existing_entities:
+            return []
+
+        existing_labels = "\n".join(f"- {e.label}" for e in existing_entities)
+
+        # Build context header matching what the entity extractor uses
+        context_parts = []
+        if document_theme:
+            context_parts.append(f"**Theme**: {document_theme}\n")
+        if concept_candidates:
+            context_parts.append("**Concepts this document is teaching**:\n")
+            for c in concept_candidates[:15]:
+                context_parts.append(f"- {c.get('name', '')} ({c.get('importance', 'supporting')})\n")
+
+        context_header = "".join(context_parts)
+
+        user_prompt = (
+            f"{context_header}\n"
+            f"## Already extracted from this chunk:\n{existing_labels}\n\n"
+            f"## Text to re-examine:\n\n{chunk_text}\n\n"
+            f"## Document ID: {doc_id}\n\n"
+            "Extract ONLY teachable entities NOT listed above. "
+            "Use the same JSON format. Return an empty entities list if none were missed."
+        )
+
+        try:
+            response = litellm.completion(
+                model=self.config.model,
+                messages=[
+                    {"role": "system", "content": self.entity_extractor.get_system_prompt()},
+                    {"role": "user", "content": user_prompt},
+                ],
+                max_tokens=self.config.max_tokens,
+            )
+            response_text = response.choices[0].message.content
+            return self.entity_extractor.parse_output(response_text)
+        except Exception:
+            return []
+
+    def _run_entity_resolution(
+        self,
+        graph: KnowledgeGraph,
+        state: PipelineState,
+    ) -> None:
+        """
+        Phase 4: Merge duplicate entities using label + alias matching.
+
+        Strategy: type-aware description aggregation (from KG_Pipeline_Patterns.md).
+        Groups entities whose labels or aliases overlap, merges descriptions,
+        takes majority type on conflict, and redirects edges to the canonical node.
+
+        Args:
+            graph: Knowledge graph to resolve in-place
+            state: Pipeline state for logging
+        """
+        # Build label → canonical_id mapping
+        label_to_canonical: dict[str, str] = {}
+        groups: dict[str, list[Node]] = {}  # canonical_id → [nodes to merge into it]
+
+        for node in list(graph.nodes.values()):
+            match_keys = [node.label.lower()] + [a.lower() for a in node.aliases]
+
+            # Find if any key already maps to a canonical
+            canonical_id = None
+            for key in match_keys:
+                if key in label_to_canonical:
+                    canonical_id = label_to_canonical[key]
+                    break
+
+            if canonical_id:
+                groups[canonical_id].append(node)
+            else:
+                canonical_id = node.id
+                groups[canonical_id] = [node]
+
+            # Register all keys to this canonical (don't overwrite existing mappings)
+            for key in match_keys:
+                if key not in label_to_canonical:
+                    label_to_canonical[key] = canonical_id
+
+        # Merge groups with duplicates
+        for canonical_id, group in groups.items():
+            if len(group) <= 1:
+                continue
+
+            if canonical_id not in graph.nodes:
+                continue
+
+            canonical = graph.nodes[canonical_id]
+            duplicates = [n for n in group[1:] if n.id != canonical_id and n.id in graph.nodes]
+
+            if not duplicates:
+                continue
+
+            for dup in duplicates:
+                # Merge description (concatenate if distinct)
+                if dup.definition and dup.definition != canonical.definition:
+                    # Truncate merged definition to stay within field max_length
+                    merged = canonical.definition + " | " + dup.definition
+                    canonical.definition = merged[:500]
+
+                # Merge aliases
+                new_aliases = list(set(canonical.aliases + dup.aliases + [dup.label]))
+                canonical.aliases = new_aliases
+
+                # Redirect edges: replace dup.id with canonical_id
+                for edge in graph.edges.values():
+                    if edge.source_id == dup.id:
+                        edge.source_id = canonical_id
+                    if edge.target_id == dup.id:
+                        edge.target_id = canonical_id
+
+                # Remove self-loops created by merging
+                self_loops = [
+                    eid for eid, e in graph.edges.items()
+                    if e.source_id == e.target_id
+                ]
+                for eid in self_loops:
+                    del graph.edges[eid]
+
+                # Remove duplicate node
+                del graph.nodes[dup.id]
+                state.log(f"  Merged '{dup.label}' → '{canonical.label}'")
 
     def run_text(self, text: str, document_id: str = "text") -> KnowledgeGraph:
         """
