@@ -11,6 +11,10 @@ langchain-text-splitters>=0.0.1
 # 向量 (实体消歧用)
 chromadb>=0.4.0
 
+# Entity resolution (embedding-based deduplication)
+sentence-transformers>=2.2.0
+scikit-learn>=1.0
+
 # 数据验证
 pydantic>=2.0.0
 
