@@ -9,10 +9,10 @@ import json
 from pathlib import Path
 import sys
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pipeline import EnhancedPipeline, EnhancedPipelineConfig
+from src.pipeline import EnhancedPipeline, EnhancedPipelineConfig
 
 
 def test_enhanced_pipeline(input_path: Path, output_path: Path):
@@ -112,7 +112,7 @@ def test_enhanced_pipeline(input_path: Path, output_path: Path):
 def main():
     # Default test file
     base_dir = Path(__file__).parent.parent
-    test_file = base_dir / "benchmark/datasets/papers/threads-cv/threads-cv.pdf"
+    test_file = base_dir / "benchmark/datasets/papers/threads-cv/source.pdf"
     output_file = base_dir / "examples/output/threads-cv_enhanced.json"
 
     # Allow custom input

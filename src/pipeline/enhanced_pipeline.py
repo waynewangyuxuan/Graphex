@@ -171,11 +171,16 @@ class EnhancedPipeline:
                 entities: list[Node] = entity_result.output or []
                 all_entities.extend(entities)
 
-                # Register entities (will be filtered in Phase 3)
+                # Register entities AND add to graph
+                # (Must add to graph BEFORE relation extraction, because
+                # add_edge() validates that source/target nodes exist)
                 for entity in entities:
                     entity.source = NodeSource(document_id=doc.document_id)
                     entity_id = state.entity_registry.register(entity)
                     chunk.extracted_entities.append(entity_id)
+                    # Add to graph immediately (may be filtered in Phase 3)
+                    if entity.id not in state.graph.nodes:
+                        state.graph.add_node(entity)
 
                 state.total_entities += len(entities)
 
