@@ -1,0 +1,62 @@
+graph TB
+    %% Node styles by type
+    classDef concept fill:#e1f5fe,stroke:#01579b
+    classDef method fill:#f3e5f5,stroke:#4a148c
+    classDef proposition fill:#fff3e0,stroke:#e65100
+    classDef agent fill:#e8f5e9,stroke:#1b5e20
+    classDef core stroke-width:3px
+
+    %% Nodes
+    n001["Condition Variable"]
+    n002(["wait()"])
+    n003(["signal()"])
+    n004["Lock/Mutex"]
+    n005["Producer/Consumer Problem"]
+    n006["Bounded Buffer"]
+    n007["Mesa Semantics"]
+    n008["Hoare Semantics"]
+    n009["State Variable"]
+    n010["Spin-based Waiting"]
+    n011["Race Condition"]
+    n012{"Use While Loop Rule"}
+    n013{"Hold Lock When Signaling"}
+    n014["Producer Thread"]
+    n015["Consumer Thread"]
+    n016(("Dijkstra"))
+    n017(("Hoare"))
+
+    %% Edges (==> for core, --> for supporting)
+    n002 ==>|PartOf| n001
+    n003 ==>|PartOf| n001
+    n001 ==>|Enables| n004
+    n001 ==>|Contrasts| n010
+    n006 ==>|PartOf| n005
+    n014 -->|PartOf| n005
+    n015 -->|PartOf| n005
+    n014 -->|Causes| n006
+    n015 -->|Causes| n006
+    n007 ==>|HasProperty| n001
+    n008 -->|HasProperty| n001
+    n007 -->|Contrasts| n008
+    n007 ==>|Causes| n012
+    n001 -->|Enables| n009
+    n001 ==>|Enables| n005
+
+    %% Apply styles
+    class n001 concept,core
+    class n002 method,core
+    class n003 method,core
+    class n004 concept,core
+    class n005 concept,core
+    class n006 concept,core
+    class n007 concept,core
+    class n008 concept
+    class n009 concept
+    class n010 concept
+    class n011 concept
+    class n012 proposition,core
+    class n013 proposition
+    class n014 concept
+    class n015 concept
+    class n016 agent
+    class n017 agent

@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `GroundingVerifier`: Filters entities without proper grounding
   - `EnhancedPipeline`: Orchestrates the three-phase approach
   - Solves the "filename extraction" problem by distinguishing "mentioned" vs "taught"
+- **Knowledge Graph Health Metrics** (2026-02-14)
+  - `Meta/Research/Knowledge_Graph_Health_Metrics.md`: Cognitive science-based guidelines
+  - `Meta/Research/Graph_Density_Analysis.md`: Token-to-node and edge-to-node ratios
+  - Quality benchmarks for different content types (textbook, paper, technical doc, news)
 
 ### Changed
 - **MVP Node types**: 5 → 6 types (added `Method` for functions/operations) (2026-02-12)
@@ -40,7 +44,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   New strategy: quality over quantity, only create edges that can be precisely typed.
 
 ### Fixed
--
+- **0 edges bug in EnhancedPipeline** (2026-02-14): Edges were being rejected because
+  nodes weren't added to the graph until after Phase 3, but `add_edge()` validates
+  that source/target nodes exist. Fix: add nodes to graph immediately after extraction
+  (before relation extraction), not after grounding verification.
 
 ### Security
 -

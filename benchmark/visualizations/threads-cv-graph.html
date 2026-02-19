@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>threads-cv Knowledge Graph</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #eee; }
+
+        #container { display: flex; height: 100vh; }
+        #graph { flex: 1; }
+        #sidebar { width: 320px; background: #16213e; padding: 20px; overflow-y: auto; border-left: 1px solid #0f3460; }
+
+        h1 { font-size: 1.2rem; margin-bottom: 15px; color: #e94560; }
+        h2 { font-size: 1rem; margin: 20px 0 10px; color: #0f4c75; border-bottom: 1px solid #0f3460; padding-bottom: 5px; }
+
+        .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+        .legend-item { display: flex; align-items: center; gap: 5px; font-size: 0.75rem; }
+        .legend-color { width: 14px; height: 14px; border-radius: 3px; }
+
+        .stats { background: #0f3460; padding: 12px; border-radius: 8px; margin-bottom: 15px; }
+        .stats p { font-size: 0.85rem; margin: 5px 0; }
+        .stats strong { color: #e94560; }
+
+        #info { background: #0f3460; padding: 15px; border-radius: 8px; min-height: 150px; }
+        #info h3 { color: #00adb5; margin-bottom: 10px; font-size: 1rem; }
+        #info p { font-size: 0.85rem; line-height: 1.5; margin: 8px 0; }
+        #info .type { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-right: 5px; }
+        #info .importance { font-size: 0.75rem; color: #888; }
+
+        .node { cursor: pointer; }
+        .node text { font-size: 11px; fill: #fff; pointer-events: none; }
+        .node.core circle, .node.core rect, .node.core polygon { stroke-width: 3px; }
+
+        .link { fill: none; stroke-opacity: 0.6; }
+        .link.core { stroke-width: 2.5px; }
+        .link.supporting { stroke-width: 1.5px; stroke-dasharray: 4,2; }
+
+        .link-label { font-size: 9px; fill: #888; }
+
+        /* Node type colors */
+        .concept { fill: #01579b; }
+        .method { fill: #4a148c; }
+        .proposition { fill: #e65100; }
+        .agent { fill: #1b5e20; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <svg id="graph"></svg>
+        <div id="sidebar">
+            <h1>threads-cv Knowledge Graph</h1>
+
+            <div class="legend">
+                <div class="legend-item"><div class="legend-color" style="background:#01579b"></div>Concept</div>
+                <div class="legend-item"><div class="legend-color" style="background:#4a148c"></div>Method</div>
+                <div class="legend-item"><div class="legend-color" style="background:#e65100"></div>Proposition</div>
+                <div class="legend-item"><div class="legend-color" style="background:#1b5e20"></div>Agent</div>
+            </div>
+
+            <div class="stats">
+                <p><strong>17</strong> Nodes (8 core)</p>
+                <p><strong>15</strong> Edges (8 core)</p>
+                <p><strong>0</strong> RelatedTo edges</p>
+            </div>
+
+            <h2>Edge Types</h2>
+            <div class="stats">
+                <p>PartOf: 4 | Enables: 3 | Causes: 3</p>
+                <p>Contrasts: 2 | HasProperty: 2</p>
+            </div>
+
+            <h2>Selected Item</h2>
+            <div id="info">
+                <p style="color:#666">Click a node or edge to see details</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const data = {
+            nodes: [
+                {id: "n001", label: "Condition Variable", type: "concept", importance: "core"},
+                {id: "n002", label: "wait()", type: "method", importance: "core"},
+                {id: "n003", label: "signal()", type: "method", importance: "core"},
+                {id: "n004", label: "Lock/Mutex", type: "concept", importance: "core"},
+                {id: "n005", label: "Producer/Consumer Problem", type: "concept", importance: "core"},
+                {id: "n006", label: "Bounded Buffer", type: "concept", importance: "core"},
+                {id: "n007", label: "Mesa Semantics", type: "concept", importance: "core"},
+                {id: "n008", label: "Hoare Semantics", type: "concept", importance: "supporting"},
+                {id: "n009", label: "State Variable", type: "concept", importance: "supporting"},
+                {id: "n010", label: "Spin-based Waiting", type: "concept", importance: "supporting"},
+                {id: "n011", label: "Race Condition", type: "concept", importance: "supporting"},
+                {id: "n012", label: "Use While Loop Rule", type: "proposition", importance: "core"},
+                {id: "n013", label: "Hold Lock When Signaling", type: "proposition", importance: "supporting"},
+                {id: "n014", label: "Producer Thread", type: "concept", importance: "supporting"},
+                {id: "n015", label: "Consumer Thread", type: "concept", importance: "supporting"},
+                {id: "n016", label: "Dijkstra", type: "agent", importance: "peripheral"},
+                {id: "n017", label: "Hoare", type: "agent", importance: "peripheral"}
+            ],
+            links: [
+                {source: "n002", target: "n001", type: "PartOf", importance: "core"},
+                {source: "n003", target: "n001", type: "PartOf", importance: "core"},
+                {source: "n001", target: "n004", type: "Enables", importance: "core"},
+                {source: "n001", target: "n010", type: "Contrasts", importance: "core"},
+                {source: "n006", target: "n005", type: "PartOf", importance: "core"},
+                {source: "n014", target: "n005", type: "PartOf", importance: "supporting"},
+                {source: "n015", target: "n005", type: "PartOf", importance: "supporting"},
+                {source: "n014", target: "n006", type: "Causes", importance: "supporting"},
+                {source: "n015", target: "n006", type: "Causes", importance: "supporting"},
+                {source: "n007", target: "n001", type: "HasProperty", importance: "core"},
+                {source: "n008", target: "n001", type: "HasProperty", importance: "supporting"},
+                {source: "n007", target: "n008", type: "Contrasts", importance: "supporting"},
+                {source: "n007", target: "n012", type: "Causes", importance: "core"},
+                {source: "n001", target: "n009", type: "Enables", importance: "supporting"},
+                {source: "n001", target: "n005", type: "Enables", importance: "core"}
+            ]
+        };
+
+        const width = window.innerWidth - 320;
+        const height = window.innerHeight;
+
+        const svg = d3.select("#graph")
+            .attr("width", width)
+            .attr("height", height);
+
+        const g = svg.append("g");
+
+        // Zoom
+        svg.call(d3.zoom().on("zoom", (e) => g.attr("transform", e.transform)));
+
+        // Arrow markers
+        const edgeColors = {
+            PartOf: "#4fc3f7", Enables: "#81c784", Causes: "#ffb74d",
+            Contrasts: "#f06292", HasProperty: "#ba68c8", Supports: "#64b5f6", Attacks: "#e57373"
+        };
+
+        Object.entries(edgeColors).forEach(([type, color]) => {
+            svg.append("defs").append("marker")
+                .attr("id", `arrow-${type}`)
+                .attr("viewBox", "0 -5 10 10")
+                .attr("refX", 25)
+                .attr("refY", 0)
+                .attr("markerWidth", 6)
+                .attr("markerHeight", 6)
+                .attr("orient", "auto")
+                .append("path")
+                .attr("fill", color)
+                .attr("d", "M0,-5L10,0L0,5");
+        });
+
+        const simulation = d3.forceSimulation(data.nodes)
+            .force("link", d3.forceLink(data.links).id(d => d.id).distance(120))
+            .force("charge", d3.forceManyBody().strength(-400))
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            .force("collision", d3.forceCollide().radius(50));
+
+        const link = g.append("g")
+            .selectAll("line")
+            .data(data.links)
+            .join("line")
+            .attr("class", d => `link ${d.importance}`)
+            .attr("stroke", d => edgeColors[d.type] || "#666")
+            .attr("marker-end", d => `url(#arrow-${d.type})`)
+            .on("click", (e, d) => showEdgeInfo(d));
+
+        const linkLabel = g.append("g")
+            .selectAll("text")
+            .data(data.links)
+            .join("text")
+            .attr("class", "link-label")
+            .text(d => d.type);
+
+        const node = g.append("g")
+            .selectAll("g")
+            .data(data.nodes)
+            .join("g")
+            .attr("class", d => `node ${d.type} ${d.importance}`)
+            .call(d3.drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended))
+            .on("click", (e, d) => showNodeInfo(d));
+
+        node.append("circle")
+            .attr("r", d => d.importance === "core" ? 22 : 16)
+            .attr("class", d => d.type);
+
+        node.append("text")
+            .attr("dy", 4)
+            .attr("text-anchor", "middle")
+            .text(d => d.label.length > 12 ? d.label.slice(0, 10) + "..." : d.label);
+
+        simulation.on("tick", () => {
+            link
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
+
+            linkLabel
+                .attr("x", d => (d.source.x + d.target.x) / 2)
+                .attr("y", d => (d.source.y + d.target.y) / 2);
+
+            node.attr("transform", d => `translate(${d.x},${d.y})`);
+        });
+
+        function dragstarted(e) { if (!e.active) simulation.alphaTarget(0.3).restart(); e.subject.fx = e.subject.x; e.subject.fy = e.subject.y; }
+        function dragged(e) { e.subject.fx = e.x; e.subject.fy = e.y; }
+        function dragended(e) { if (!e.active) simulation.alphaTarget(0); e.subject.fx = null; e.subject.fy = null; }
+
+        function showNodeInfo(d) {
+            const typeColors = {concept: "#01579b", method: "#4a148c", proposition: "#e65100", agent: "#1b5e20"};
+            document.getElementById("info").innerHTML = `
+                <h3>${d.label}</h3>
+                <p><span class="type" style="background:${typeColors[d.type]}">${d.type}</span>
+                <span class="importance">${d.importance}</span></p>
+            `;
+        }
+
+        function showEdgeInfo(d) {
+            document.getElementById("info").innerHTML = `
+                <h3>${d.source.label} → ${d.target.label}</h3>
+                <p><span class="type" style="background:${edgeColors[d.type]}">${d.type}</span>
+                <span class="importance">${d.importance}</span></p>
+            `;
+        }
+    </script>
+</body>
+</html>
