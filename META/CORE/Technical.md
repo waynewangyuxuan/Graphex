@@ -210,6 +210,12 @@ Prompt 结构:
   - Context: 已知实体列表（防止重复创建）
   - Examples: 2-3 个领域相关示例
   - Output Format: JSON
+
+Gleaning（迭代提取）:
+  - enabled: chunk token_count > 500   # 短 chunk 信息密度低，gleaning 价值有限
+  - max_gleanings: 可调               # 建议从 1 开始；每增 1 轮约 2x token 消耗，召回提升递减
+  - continuation_prompt: "可能有遗漏的实体，请继续提取"
+  - stop_condition: LLM 回答"无更多"或达到 max_gleanings 上限
 ```
 
 #### Agent 2: Relation Extractor
@@ -380,17 +386,28 @@ class EntityRegistry:
         return [self.entities[eid] for eid, _ in similarities[:limit]]
 ```
 
-### 4.4 跨 Chunk 实体合并（后处理）
+### 4.4 跨 Chunk 实体合并（Phase 4: Entity Resolution）
 
 ```python
 def resolve_entities_post_processing(
     all_entities: List[Entity],
     llm: LLM
 ) -> List[Entity]:
-    """后处理阶段的实体消歧"""
+    """Phase 4: 实体消歧与合并
 
-    # 1. 基于 embedding 聚类
-    clusters = cluster_by_embedding(all_entities, threshold=0.85)
+    Strategy 1 (P0) — 描述聚合:
+      按 label + aliases 匹配，合并描述，类型取众数，描述过长时用 cheap model 摘要。
+      利用 Graphex schema 中已有的 aliases 字段作为匹配键。
+
+    Strategy 2 (Enhancement) — Embedding 聚类:
+      处理词法无法捕获的同义词（如 "CV" vs "Condition Variable"），在描述聚合之后运行。
+    """
+
+    # 1. 描述聚合（P0）：按 label + aliases 匹配，合并描述和类型
+    resolved = aggregate_by_label_and_aliases(all_entities, llm)
+
+    # 2. 基于 embedding 聚类（Enhancement）：处理同义词
+    clusters = cluster_by_embedding(resolved, threshold=0.85)
 
     # 2. 对每个可能的合并，用 LLM 验证
     merged_entities = []

@@ -39,3 +39,4 @@ Proposed → Accepted → [Deprecated | Superseded]
 | Number | Title | Status | Date |
 |--------|-------|--------|------|
 | [ADR-0001](ADR-0001-multi-agent-pipeline-architecture.md) | Multi-Agent Pipeline Architecture | Proposed | 2026-02-01 |
+| [ADR-0002](ADR-0002-gleaning-and-entity-resolution.md) | Gleaning and Description-Aggregation Entity Resolution | Proposed | 2026-02-18 |

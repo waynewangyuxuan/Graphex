@@ -4,6 +4,29 @@ Append-only development log. Add new entries at the top.
 
 ---
 
+## 2026-02-18
+
+### Completed
+- Applied Prism knowledge module `kg-extraction-pipeline` (GraphRAG + nano-graphrag patterns)
+  - Created `Meta/Research/KG_Pipeline_Patterns.md` — Graphex-specific pattern digest
+  - Created `Meta/Decisions/ADR-0002` — Gleaning + Entity Resolution adoption decision
+  - Updated `Meta/Core/Technical.md` — §3.3 Gleaning spec, §4.4 Phase 4 Entity Resolution strategy
+- Began implementation of P0 patterns in `src/pipeline/`
+
+### Decisions Made
+- **Gleaning**: `max_gleanings` is adjustable (not hardcoded); start at 1; only on chunks >500 tokens
+- **P1 patterns** (Community Detection, Storage Abstraction): documented in KG_Pipeline_Patterns.md only; not yet integrated into Technical.md roadmap
+
+### Blockers / Issues
+- None
+
+### Next
+- [ ] Run benchmark (threads-cv) after Gleaning + Entity Resolution implementation
+- [ ] Target: core node recall >60%
+- [ ] If P0 sufficient, plan P1: Community Detection (graspologic/Leiden)
+
+---
+
 ## 2026-02-12
 
 ### Completed
