@@ -54,7 +54,7 @@ merge_entity(existing, new_entity):
     existing.sources.append(new_entity.source)
 ```
 
-**Enhancement（配合 Technical.md §4.4）**：embedding 聚类处理词法无法捕获的同义词（"CV" vs "Condition Variable"），在描述聚合之后运行。
+**Enhancement（配合 Technical.md §4.4）**：embedding 聚类处理词法无法捕获的同义词（"CV" vs "Condition Variable"），在描述聚合之后运行。实现：`src/resolution/entity_resolver.py`（三层级联匹配）+ `src/resolution/parallel_merge.py`（二叉归约）。当前已接入 cocoindex spike；main pipeline Phase 4 集成待后续（ADR-0004）。
 
 **边的合并**（与实体合并同步）：
 

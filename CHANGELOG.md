@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **CocoIndex-style Structured Extraction Spike** (2026-02-19)
+  - `benchmark/scripts/cocoindex_spike.py`: Single-call LLM extraction (entities + relationships)
+  - Evaluated against threads-cv Ground Truth: 100% core node recall, 50% core edge recall
+  - ADR-0003: Decision to adopt structured extraction pattern over multi-agent pipeline
 - Project structure with Meta folder hierarchy
 - Core documentation (Product.md, Technical.md)
 - Research documents (Cognitive_Foundations.md, Node_Edge_Schema.md)

@@ -4,6 +4,52 @@ Append-only development log. Add new entries at the top.
 
 ---
 
+## 2026-02-19
+
+### Completed
+- 评估 CocoIndex（cocoindex.io）作为提取管线替代方案
+  - 调研 CocoIndex 架构：Rust 核心 + Python API，增量处理，声明式数据流，Neo4j 集成
+  - 环境限制：需要 Python ≥3.11 + PostgreSQL，当前 VM 无法直接运行
+- 编写 CocoIndex 风格 Spike 脚本 (`benchmark/scripts/cocoindex_spike.py`)
+  - 模拟 CocoIndex 的 `ExtractByLlm` 模式：单次 LLM 调用同时提取 entities + relationships
+  - 使用 JSON 结构化输出，匹配 Graphex 的 Node/Edge Schema
+  - 基础 label 去重 + 边去重
+- 在 threads-cv benchmark 上运行 Spike 并完成评估
+- 创建 ADR-0003: CocoIndex-Style Structured Extraction
+
+### Spike 结果（threads-cv）
+
+| 指标 | Multi-Agent Pipeline | CocoIndex Spike | 目标 |
+|---|---|---|---|
+| 核心节点召回 | 37.5% | **100%** | >60% |
+| 全部节点召回 | ~35% | **100%** | — |
+| 核心边召回 | 25% | **50%** | >60% |
+| RelatedTo 占比 | 76% | 0.7% | <40% |
+| 提取实体数 | 19 | 113 | ~17 |
+
+### 关键发现
+- **单次结构化提取显著优于多 agent 分步提取**：同时看到 entities + relationships 的上下文让 LLM 更好地理解关系语义
+- **实体爆炸问题**：113 个实体（GT 17 个），原因是跨 chunk 去重只做了 label 精确匹配
+- **噪声实体**：grep, wc, Quicksort, HTTP request 等非教学内容被提取
+- **结论**：CocoIndex 做提取底座 + Graphex 做后处理增强（Entity Resolution + FirstPass 过滤）
+
+### Decisions Made
+- 采用 CocoIndex 风格的单次结构化提取替代 multi-agent 分步提取 (ADR-0003)
+- MVP 阶段暂不引入 CocoIndex 框架本身，仅采用其提取模式
+- 下一步重点：Entity Resolution 增强，解决实体爆炸问题
+
+### Blockers / Issues
+- VM 环境无法运行 CocoIndex（需 PostgreSQL + Python ≥3.11）
+- Gemini API 在 VM 网络环境中被阻断（403），Spike 在本地运行
+
+### Next
+- [ ] 增强 Entity Resolution：语义去重（synonym matching, embedding similarity）
+- [ ] 叠加 FirstPass 过滤到 Spike 脚本，减少噪声实体
+- [ ] 验证后处理后的最终指标（目标：实体数 ~20, 核心边召回 >60%）
+- [ ] 在 MiroThinker 和 threads-bugs 上跑 Spike 验证泛化性
+
+---
+
 ## 2026-02-18
 
 ### Completed
