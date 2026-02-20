@@ -77,24 +77,61 @@ Append-only development log. Add new entries at the top.
   - Producer Thread / Consumer Thread 未单独提取 → 阻断 4 条边
   - "While Loop Rule" 节点 miss → 阻断 Mesa→While Loop Rule (Causes) 核心边
 
+- **Repo 重构：Config-Driven Experiment Organization (ADR-0007)**
+  - 从 `cocoindex_spike.py` 提取逻辑到 `src/extraction/` 和 `src/evaluation/`
+  - 删除死代码：`src/agents/` (6 files), `src/pipeline/` (4 files), `src/context/` (3 files), `examples/` (5 files)
+  - 创建 `experiments/` 目录：`configs/` (v1-v5 YAML), `runners/`, `results/` (.gitignored)
+  - `src/extraction/prompts.py` 支持多 prompt 变体 (PROMPTS registry: "chunk", "whole_doc")
+  - `extract_chunk()` 新增 `prompt` 参数，支持 config 驱动的 prompt 选择
+  - 修复 4 个 pre-existing test failures (chunker defaults, RELATED_TO removal)
+  - 净减 3,435 行代码，新增 702 行
+
+- **v6 整文档提取实验（Whole-Document Extraction）**
+  - 假设：Gemini 2.5 Flash Lite 有 1M 上下文，threads-cv 仅 ~9k tokens，可一次性提取
+  - 首次尝试（chunk prompt）：12 entities, 75% core node recall — LLM 过于保守
+  - 创建 `WHOLE_DOC_PROMPT`：强调 "Be thorough"，提示 15-25 entities，去掉 "quality over quantity"
+  - 优化后结果显著改善
+
+| 指标 | v5 分块+ER | v6 整文档(chunk prompt) | **v6 整文档(whole_doc prompt)** | 目标 |
+|---|---|---|---|---|
+| 实体数 | 40 | 12 | **20** | ~17 |
+| 核心节点召回 | 87.5% (7/8) | 75% (6/8) | **87.5% (7/8)** | >60% |
+| 全部节点召回 | 88.2% (15/17) | 47.1% (8/17) | **70.6% (12/17)** | — |
+| 核心边召回 | 50% (4/8) | 25% (2/8) | **37.5% (3/8)** | >60% |
+| LLM 调用次数 | 8+1(ER) | **1** | **1** | — |
+| Input tokens | 14,657 | 11,409 | **11,504** | — |
+| Output tokens | 9,153 | 1,438 | **2,481** | — |
+
+- **v6 实体质量深度分析**
+  - 20 个实体全部零噪声，额外提取的 broadcast(), Covering Condition, Spurious Wakeup 等都合理
+  - Label 不匹配导致 eval miss："Wait Must Re-check Condition" = GT "Use While Loop Rule"；"Spinning" = GT "Spin-based Waiting"
+  - Producer Thread / Consumer Thread 未单独提取，被归入 P/C Problem definition
+
+- **v6 边质量深度分析 — 主要瓶颈**
+  - 使用了非法边类型 `"Claim"`（应为实体类型）— Flash Lite 指令遵循弱
+  - 方向反转：P/C→CV (Enables) 提取反了，GT 是 CV→P/C (Enables)
+  - 语义类型错误：State Variable→CV 标为 "Before"（应为 Enables），CV→Lock 标为 "PartOf"（GT 为 Enables）
+  - 实际匹配 GT 的边仅 4 条：wait()→CV PartOf, signal()→CV PartOf, Bounded Buffer→P/C PartOf, Mesa→Hoare Contrasts
+
 ### Decisions Made
 - **Abandon embedding cosine similarity for ER** — 无法在 under-merge 和 over-merge 之间找到平衡点（ADR-0004 → Superseded）
 - **Adopt Graphiti-style cascading ER** — 确定性优先、LLM 兜底的三层方法 (ADR-0005)
 - **Chunk size 从 512 chars 提升至 6000 chars** — 根因是 `length_function=len` 按字符计数，128 tokens 太碎导致实体爆炸
 - Chunk size 是比 ER 更大的杠杆：源头减少碎片 > 下游修补重复
+- **Repo 重构为 config-driven experiment organization** (ADR-0007) — src/ 只保留活跃代码，实验通过 YAML config 驱动
+- **整文档提取可行但边质量受限** — 实体质量已达标（20 entities, 87.5% core recall），但边的方向和类型判断是 Flash Lite 模型能力瓶颈
 
 ### Blockers / Issues
-- 边召回仍未达标（37.5% core vs 目标 >60%）— 主要受限于边方向匹配和缺失的细粒度节点
-- Eval 子串匹配过于严格 — "Use While Loop Rule" 已被正确提取但无法匹配
-- `requirements.txt` 仍包含 sentence-transformers 和 scikit-learn（Graphiti 方案不再需要，可清理）
+- 边召回仍未达标（37.5% core vs 目标 >60%）— 根因是 Flash Lite 的边类型/方向判断弱，非 prompt 可完全解决
+- Eval 子串匹配过于严格 — "Wait Must Re-check Condition" vs "Use While Loop Rule" 无法匹配
+- Flash Lite 产出非法 edge type（"Claim" 作为边类型）— 需要后处理校验或更强模型
 
 ### Next
 - [ ] 增强 eval 匹配逻辑（模糊匹配 / synonym 映射 / 双向边匹配），减少假阴性
 - [ ] 边方向归一化：PartOf 等方向敏感的边类型考虑双向匹配或规范化
-- [ ] Extraction prompt 优化：引导提取 Producer Thread / Consumer Thread 等细粒度节点
+- [ ] 边质量提升策略：用更强模型（Flash / Pro）做边提取，或加 edge-level 后处理校验
 - [ ] 清理 requirements.txt 中不再需要的 embedding 依赖
 - [ ] 在 MiroThinker 和 threads-bugs 上验证泛化性
-- [ ] 考虑将 ER + 大 chunk 配置集成到 `enhanced_pipeline.py`
 
 ---
 

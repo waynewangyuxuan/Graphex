@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Config-Driven Experiment Organization** (2026-02-20)
+  - `experiments/configs/`: YAML configs for all experiments (v1-v6), versioned and committed
+  - `experiments/runners/`: Config-driven extraction and evaluation runners
+  - `src/extraction/`: Promoted from spike — structured_extractor.py, prompts.py, merger.py
+  - `src/evaluation/`: Promoted from spike — evaluator.py
+  - Multi-prompt support: PROMPTS registry with "chunk" and "whole_doc" variants
+  - ADR-0007: Experiment organization and dead code cleanup
+- **Whole-Document Extraction (v6)** (2026-02-20)
+  - Single LLM call for entire document — no chunking, no ER needed
+  - `WHOLE_DOC_PROMPT`: thorough extraction prompt for long-context models
+  - Result: 20 entities, 87.5% core node recall, 1 LLM call, ~11k input tokens
 - **Graphiti-Style Cascading Entity Resolution** (2026-02-20)
   - `src/resolution/entity_resolver.py`: Three-layer cascade (exact match → entropy-gated Jaccard → LLM batch dedup)
   - `src/resolution/parallel_merge.py`: O(log N) binary reduction merge with ThreadPoolExecutor
@@ -53,6 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 -
 
 ### Removed
+- **Dead code cleanup** (2026-02-20): `src/agents/`, `src/pipeline/`, `src/context/`, `examples/`
+  All superseded by CocoIndex-style structured extraction (ADR-0003). -3,435 lines.
 - **`RelatedTo` edge type** (2026-02-12): Too generic - nodes with edges are obviously related.
   This "fallback" option led to lazy classification (76% usage in benchmark tests).
   New strategy: quality over quantity, only create edges that can be precisely typed.

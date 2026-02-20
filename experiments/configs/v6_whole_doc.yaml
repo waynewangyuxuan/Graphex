@@ -1,0 +1,16 @@
+experiment:
+  name: "v6-whole-doc"
+  date: "2026-02-20"
+  description: "Whole-document single-call extraction with thorough prompt — no chunking, no ER"
+  status: "testing"
+
+extraction:
+  model: "gemini/gemini-2.5-flash-lite-preview-09-2025"
+  mode: "whole_doc"
+  prompt: "whole_doc"     # uses WHOLE_DOC_PROMPT from src/extraction/prompts.py
+
+resolution:
+  method: "none"
+
+evaluation:
+  datasets: ["threads-cv"]
