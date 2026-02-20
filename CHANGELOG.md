@@ -38,6 +38,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Quality benchmarks for different content types (textbook, paper, technical doc, news)
 
 ### Changed
+- **Chunk size**: 512 chars (~128 tokens) → 6000 chars (~1500 tokens) (2026-02-20)
+  - Fixed `length_function=len` misunderstanding (was counting chars, not tokens)
+  - Result: 18 entities (was 67), 87.5% core node recall (was 50%), 75% less token usage
 - **Entity Resolution strategy**: Embedding cosine similarity → Graphiti-style cascading (2026-02-20)
   - ADR-0004 (embedding, superseded) → ADR-0005 (Graphiti cascading, accepted)
   - Root cause: embedding cosine unreliable for short entity names ("Lock", "Mutex", "Thread")

@@ -47,22 +47,54 @@ Append-only development log. Add new entries at the top.
   - "bounded buffer" — 未被提取
   - "use while loop rule" vs "Use while loop instead of if statement"（无子串匹配）
 
+- **Chunk Size 优化：512 chars → 6000 chars (~128 tokens → ~1500 tokens)**
+  - 发现 `length_function=len` 导致 chunk_size=512 实际是 512 字符 ≈ 128 tokens（远低于预期）
+  - 参考各项目 chunk size：GraphRAG 300-600t, LightRAG 1200t, RAGFlow 4096t, KGGen 整文档
+  - 调整为 6000 chars (~1500 tokens)，overlap 等比放大到 900 chars (~15%)
+  - threads-cv 从 ~30 chunks 降至 ~5 chunks
+
+- **Chunk Size 优化实验结果（threads-cv，含 Graphiti ER）**
+
+| 指标 | 512 chars + Graphiti | **6000 chars + Graphiti** | 目标 |
+|---|---|---|---|
+| 提取实体数 | 67 | **18** | ~20 |
+| 核心节点召回 | 50% (4/8) | **87.5% (7/8)** | >60% |
+| 全部节点召回 | 64.7% (11/17) | **70.6% (12/17)** | — |
+| 核心边召回 | 25% (2/8) | **37.5% (3/8)** | >60% |
+| 全部边召回 | 13.3% (2/15) | **26.7% (4/15)** | — |
+| Input tokens | 54,714 | **14,649** | — |
+| Output tokens | 33,979 | **5,314** | — |
+
+- **关键改善分析**：
+  - 之前 4 个 missing core nodes 中 3 个被解锁（Lock/Mutex, Bounded Buffer, Producer/Consumer Problem）
+  - 唯一剩余 miss: "Use While Loop Rule" — 实际已被提取为 "Always use while loops when waiting on a condition variable"，但 eval 子串匹配无法捕获
+  - 实体数从 67→18，精准命中目标范围
+  - Token 消耗降低 ~75%（更少的 chunks = 更少的 LLM 调用）
+
+- **边召回瓶颈分析**：
+  - 匹配的 4 条边：wait()→CV PartOf, signal()→CV PartOf, Mesa→Hoare Contrasts, CV→P/C Enables
+  - 方向反转导致 miss：GT 说 Bounded Buffer→P/C (PartOf)，提取出 P/C→Bounded Buffer (PartOf)
+  - Producer Thread / Consumer Thread 未单独提取 → 阻断 4 条边
+  - "While Loop Rule" 节点 miss → 阻断 Mesa→While Loop Rule (Causes) 核心边
+
 ### Decisions Made
 - **Abandon embedding cosine similarity for ER** — 无法在 under-merge 和 over-merge 之间找到平衡点（ADR-0004 → Superseded）
 - **Adopt Graphiti-style cascading ER** — 确定性优先、LLM 兜底的三层方法 (ADR-0005)
-- 剩余 missing core nodes 需要在 eval 匹配逻辑 和/或 extraction prompt 层面解决，非 ER 层面
+- **Chunk size 从 512 chars 提升至 6000 chars** — 根因是 `length_function=len` 按字符计数，128 tokens 太碎导致实体爆炸
+- Chunk size 是比 ER 更大的杠杆：源头减少碎片 > 下游修补重复
 
 ### Blockers / Issues
-- 实体数仍偏高（67 vs 目标 ~20）— 噪声实体（grep, wc, UNIX pipe 等）来自提取层
-- 边召回偏低（25% core）— 受制于节点匹配失败和边类型精确匹配要求
+- 边召回仍未达标（37.5% core vs 目标 >60%）— 主要受限于边方向匹配和缺失的细粒度节点
+- Eval 子串匹配过于严格 — "Use While Loop Rule" 已被正确提取但无法匹配
 - `requirements.txt` 仍包含 sentence-transformers 和 scikit-learn（Graphiti 方案不再需要，可清理）
 
 ### Next
-- [ ] 增强 eval 匹配逻辑（模糊匹配 / synonym 映射），减少假阴性
-- [ ] Extraction prompt 优化：减少噪声实体，提高 label 与 Ground Truth 一致性
+- [ ] 增强 eval 匹配逻辑（模糊匹配 / synonym 映射 / 双向边匹配），减少假阴性
+- [ ] 边方向归一化：PartOf 等方向敏感的边类型考虑双向匹配或规范化
+- [ ] Extraction prompt 优化：引导提取 Producer Thread / Consumer Thread 等细粒度节点
 - [ ] 清理 requirements.txt 中不再需要的 embedding 依赖
-- [ ] 在 MiroThinker 和 threads-bugs 上跑 Graphiti ER 验证泛化性
-- [ ] 考虑将 Graphiti ER 集成到 `enhanced_pipeline.py`
+- [ ] 在 MiroThinker 和 threads-bugs 上验证泛化性
+- [ ] 考虑将 ER + 大 chunk 配置集成到 `enhanced_pipeline.py`
 
 ---
 
