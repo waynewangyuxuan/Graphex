@@ -27,7 +27,7 @@ _ENTROPY_THRESHOLD = 1.5
 _MIN_NAME_LENGTH = 6
 _MIN_TOKEN_COUNT = 2
 _JACCARD_THRESHOLD = 0.9
-_DEFAULT_LLM_MODEL = "gemini/gemini-2.0-flash"
+_DEFAULT_LLM_MODEL = "gemini/gemini-2.5-flash-lite-preview-09-2025"
 
 
 class EntityResolver:

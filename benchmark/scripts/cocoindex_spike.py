@@ -291,7 +291,7 @@ def evaluate_against_ground_truth(
 def run_spike(
     pdf_path: Path,
     ground_truth_path: Path,
-    model: str = "gemini/gemini-2.0-flash",
+    model: str = "gemini/gemini-2.5-flash-lite-preview-09-2025",
     chunk_size: int = 6000,
     chunk_overlap: int = 900,
     max_extract_workers: int = 8,
