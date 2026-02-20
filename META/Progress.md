@@ -4,6 +4,68 @@ Append-only development log. Add new entries at the top.
 
 ---
 
+## 2026-02-20
+
+### Completed
+- **Entity Resolution Phase 1: iText2KG Embedding Approach (ADR-0004)**
+  - 创建 `src/resolution/entity_resolver.py` — 基于 embedding cosine similarity 的去重
+  - 创建 `src/resolution/parallel_merge.py` — O(log N) 二叉归约合并（ThreadPoolExecutor）
+  - 使用 sentence-transformers (`all-MiniLM-L6-v2`) 编码实体 label+type+definition
+  - Union-Find 聚类，阈值可调
+  - 接入 `benchmark/scripts/cocoindex_spike.py`（通过 `parallel_merge()`）
+
+- **Embedding ER 实验结果（threads-cv）**
+  - θ=0.8: 113→78 entities — under-merge，大量重复未被捕获
+  - 加入 definition 到 embedding 输入 — 无改善，仍然 78 entities
+  - θ=0.6: 113→24 entities — **灾难性 over-merge**
+    - wait(), signal(), Lock, Mutex 全部合并为同一实体
+    - 核心节点召回从 62.5% 暴跌至 12.5%
+  - **根因分析**: embedding cosine similarity 对短实体名不可靠，"Lock"、"Mutex"、"Thread" 在语义空间中距离太近
+
+- **Entity Resolution Phase 2: Graphiti 三层级联方法 (ADR-0005, supersedes ADR-0004)**
+  - 重写 `src/resolution/entity_resolver.py` — 完全替换 embedding 方案
+  - Layer 1: Exact normalized match (HashMap O(1))
+  - Layer 2: Entropy-gated 3-gram character Jaccard (θ=0.9)
+    - Shannon 熵值门控：短名称（"Lock"、"API"）跳过模糊匹配，直接送 LLM
+    - 高熵名称（"Condition Variable"、"Bounded Buffer"）走 Jaccard 匹配
+  - Layer 3: LLM batch dedup — 所有未解决的单例实体一次性送 LLM 分组
+  - 无新外部依赖（Layer 1-2 纯 Python 字符串操作，Layer 3 使用现有 litellm）
+
+- **Graphiti ER 实验结果（threads-cv）**
+
+| 指标 | CocoIndex 无 ER | Embedding θ=0.8 | Embedding θ=0.6 | Graphiti 级联 | 目标 |
+|---|---|---|---|---|---|
+| 提取实体数 | 113 | 78 | 24 | **67** | ~20 |
+| 核心节点召回 | 100% | 62.5% | 12.5% | **50%** | >60% |
+| 全部节点召回 | 100% | — | — | **64.7%** | — |
+| 核心边召回 | 50% | — | — | **25%** | >60% |
+| over-merge 问题 | 无 | 无 | **严重** | 无 | — |
+
+- **4 个 Missing Core Nodes 分析** — 非 ER 问题，是提取/评估层面的 gap：
+  - "lock/mutex" vs "Mutex Lock"（词序不匹配）
+  - "producer/consumer problem" vs "Producer/Consumer Solution"（用词差异）
+  - "bounded buffer" — 未被提取
+  - "use while loop rule" vs "Use while loop instead of if statement"（无子串匹配）
+
+### Decisions Made
+- **Abandon embedding cosine similarity for ER** — 无法在 under-merge 和 over-merge 之间找到平衡点（ADR-0004 → Superseded）
+- **Adopt Graphiti-style cascading ER** — 确定性优先、LLM 兜底的三层方法 (ADR-0005)
+- 剩余 missing core nodes 需要在 eval 匹配逻辑 和/或 extraction prompt 层面解决，非 ER 层面
+
+### Blockers / Issues
+- 实体数仍偏高（67 vs 目标 ~20）— 噪声实体（grep, wc, UNIX pipe 等）来自提取层
+- 边召回偏低（25% core）— 受制于节点匹配失败和边类型精确匹配要求
+- `requirements.txt` 仍包含 sentence-transformers 和 scikit-learn（Graphiti 方案不再需要，可清理）
+
+### Next
+- [ ] 增强 eval 匹配逻辑（模糊匹配 / synonym 映射），减少假阴性
+- [ ] Extraction prompt 优化：减少噪声实体，提高 label 与 Ground Truth 一致性
+- [ ] 清理 requirements.txt 中不再需要的 embedding 依赖
+- [ ] 在 MiroThinker 和 threads-bugs 上跑 Graphiti ER 验证泛化性
+- [ ] 考虑将 Graphiti ER 集成到 `enhanced_pipeline.py`
+
+---
+
 ## 2026-02-19
 
 ### Completed
@@ -43,7 +105,7 @@ Append-only development log. Add new entries at the top.
 - Gemini API 在 VM 网络环境中被阻断（403），Spike 在本地运行
 
 ### Next
-- [ ] 增强 Entity Resolution：语义去重（synonym matching, embedding similarity）
+- [x] 增强 Entity Resolution：语义去重 → 完成，见 2026-02-20（ADR-0004 → ADR-0005）
 - [ ] 叠加 FirstPass 过滤到 Spike 脚本，减少噪声实体
 - [ ] 验证后处理后的最终指标（目标：实体数 ~20, 核心边召回 >60%）
 - [ ] 在 MiroThinker 和 threads-bugs 上跑 Spike 验证泛化性

@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Graphiti-Style Cascading Entity Resolution** (2026-02-20)
+  - `src/resolution/entity_resolver.py`: Three-layer cascade (exact match → entropy-gated Jaccard → LLM batch dedup)
+  - `src/resolution/parallel_merge.py`: O(log N) binary reduction merge with ThreadPoolExecutor
+  - ADR-0005: Replaces embedding approach; entropy gate prevents over-merging of short entity names
 - **CocoIndex-style Structured Extraction Spike** (2026-02-19)
   - `benchmark/scripts/cocoindex_spike.py`: Single-call LLM extraction (entities + relationships)
   - Evaluated against threads-cv Ground Truth: 100% core node recall, 50% core edge recall
@@ -34,6 +38,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Quality benchmarks for different content types (textbook, paper, technical doc, news)
 
 ### Changed
+- **Entity Resolution strategy**: Embedding cosine similarity → Graphiti-style cascading (2026-02-20)
+  - ADR-0004 (embedding, superseded) → ADR-0005 (Graphiti cascading, accepted)
+  - Root cause: embedding cosine unreliable for short entity names ("Lock", "Mutex", "Thread")
 - **MVP Node types**: 5 → 6 types (added `Method` for functions/operations) (2026-02-12)
 - **MVP Edge types**: 8 → 11 → 10 types (added `Enables`, `Prevents`, `Contrasts`; removed `RelatedTo`) (2026-02-12)
 - Clarified `Agent` type to exclude copyright/reference authors (2026-02-12)
