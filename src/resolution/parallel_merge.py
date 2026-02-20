@@ -2,10 +2,10 @@
 Parallel pairwise merge for chunk KGs using binary reduction.
 
 Reduces N chunk KGs to 1 in O(log N) rounds, merging pairs concurrently
-via ThreadPoolExecutor. Each merge uses EntityResolver for deduplication.
+via ThreadPoolExecutor. Each merge uses EntityResolver (Graphiti-style
+cascading: exact → entropy-gated Jaccard → LLM batch dedup).
 
-Pattern from iText2KG atom.py:parallel_atomic_merge() (AuvaLab/itext2kg).
-Source: entity-resolution-module, applied 2026-02-19.
+Source: entity-resolution-module + graphiti-er-module.
 """
 
 from concurrent.futures import ThreadPoolExecutor

@@ -141,11 +141,11 @@ def extract_chunk_cocoindex_style(
 
 def merge_chunk_results(chunk_results: list[dict], max_workers: int = 4) -> dict:
     """
-    Merge results from multiple chunks using embedding-based entity resolution
-    and parallel pairwise merge (O(log N) rounds).
+    Merge results from multiple chunks using Graphiti-style cascading entity
+    resolution (exact → entropy-gated Jaccard → LLM batch dedup) and parallel
+    pairwise merge (O(log N) rounds).
 
-    Replaces the previous simple label-dedup approach.
-    Source: entity-resolution-module (iText2KG pattern, applied 2026-02-19).
+    Source: graphiti-er-module (applied 2026-02-20), supersedes iText2KG approach.
     See: src/resolution/entity_resolver.py, src/resolution/parallel_merge.py
     """
     total_tokens = {
@@ -159,8 +159,8 @@ def merge_chunk_results(chunk_results: list[dict], max_workers: int = 4) -> dict
         for r in chunk_results
     ]
 
-    print("Initializing entity resolver (embedding model)...", end=" ", flush=True)
-    resolver = EntityResolver()
+    print("Initializing entity resolver...", end=" ", flush=True)
+    resolver = EntityResolver(enable_llm_layer=True)
     print("ready")
 
     merged_kg = parallel_merge(kg_parts, resolver, max_workers=max_workers)
