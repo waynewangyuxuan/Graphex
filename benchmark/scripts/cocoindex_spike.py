@@ -292,8 +292,8 @@ def run_spike(
     pdf_path: Path,
     ground_truth_path: Path,
     model: str = "gemini/gemini-2.0-flash",
-    chunk_size: int = 512,
-    chunk_overlap: int = 75,
+    chunk_size: int = 6000,
+    chunk_overlap: int = 900,
     max_extract_workers: int = 8,
 ):
     """Run the full spike: parse → chunk → extract → evaluate."""

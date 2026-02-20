@@ -1,10 +1,11 @@
 """
 Recursive character text splitter with semantic boundary respect.
 
-Parameters from Technical.md:
-- chunk_size: 512 tokens
-- chunk_overlap: 75 tokens (~15%)
-- separators: paragraph > newline > sentence > space
+NOTE: length_function=len counts CHARACTERS, not tokens.
+English text: ~1 token ≈ 4 chars. So chunk_size in chars ÷ 4 ≈ tokens.
+
+Default: chunk_size=6000 chars ≈ 1500 tokens, chunk_overlap=900 chars (~15%).
+Separators: paragraph > newline > sentence > space.
 """
 
 from dataclasses import dataclass, field
@@ -55,15 +56,15 @@ class Chunker:
 
     def __init__(
         self,
-        chunk_size: int = 512,
-        chunk_overlap: int = 75,
+        chunk_size: int = 6000,
+        chunk_overlap: int = 900,
         separators: Optional[list[str]] = None,
     ) -> None:
         """
         Initialize chunker.
 
         Args:
-            chunk_size: Target chunk size in characters (approx tokens)
+            chunk_size: Target chunk size in characters (~1500 tokens at 4 chars/token)
             chunk_overlap: Overlap between chunks
             separators: Custom separators in priority order
         """
