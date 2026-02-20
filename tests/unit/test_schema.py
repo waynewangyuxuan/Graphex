@@ -74,13 +74,15 @@ class TestEdge:
             EdgeType.IS_A,
             EdgeType.PART_OF,
             EdgeType.CAUSES,
+            EdgeType.ENABLES,
+            EdgeType.PREVENTS,
             EdgeType.BEFORE,
             EdgeType.HAS_PROPERTY,
+            EdgeType.CONTRASTS,
             EdgeType.SUPPORTS,
             EdgeType.ATTACKS,
-            EdgeType.RELATED_TO,
         ]
-        assert len(types) == 8
+        assert len(types) == 10
 
 
 class TestKnowledgeGraph:

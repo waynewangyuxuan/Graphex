@@ -29,9 +29,12 @@ htmlcov/
 Thumbs.db
 
 # Output
-examples/output/
 *.json
 !package.json
+
+# Experiment results (reproduced from config + runner)
+experiments/results/
+!experiments/results/.gitkeep
 
 # Environment
 .env

@@ -1,16 +1,8 @@
 """
 Test that edges can be added after entities are extracted.
 
-This test verifies the fix for the 0 edges bug where edges couldn't be added
-because nodes weren't in the graph when add_edge was called.
-
-Bug: In enhanced_pipeline.py, nodes were only added to the graph AFTER
-Phase 3 (grounding verification), but edges were being added in Phase 2.
-Since KnowledgeGraph.add_edge() validates that source/target nodes exist,
-ALL edges were being rejected with ValueError.
-
-Fix: Add nodes to graph immediately after extraction (in Phase 2),
-before relation extraction runs. Nodes may still be filtered in Phase 3.
+Verifies that KnowledgeGraph.add_edge() correctly validates source/target
+nodes exist, and that the correct pipeline order (add nodes before edges) works.
 """
 
 import sys
@@ -106,74 +98,8 @@ def test_pipeline_order_fix():
     assert len(graph.edges) == 3
 
 
-def test_filter_graph_removes_edges_to_filtered_nodes():
-    """Test that _filter_graph correctly removes edges when nodes are filtered."""
-    from src.pipeline.enhanced_pipeline import EnhancedPipeline, EnhancedPipelineConfig
-
-    graph = KnowledgeGraph()
-
-    # Add nodes
-    for node in [
-        make_node('e1', 'Node A', 'First node definition'),
-        make_node('e2', 'Node B', 'Second node definition'),
-        make_node('e3', 'Node C', 'Third node definition'),
-    ]:
-        graph.add_node(node)
-
-    # Add edges
-    for edge in [
-        make_edge('r1', 'e1', 'e2', EdgeType.IS_A),
-        make_edge('r2', 'e2', 'e3', EdgeType.PART_OF),
-    ]:
-        graph.add_edge(edge)
-
-    assert len(graph.nodes) == 3
-    assert len(graph.edges) == 2
-
-    # Simulate grounding verification: only e1 and e2 are verified
-    verified_ids = {'e1', 'e2'}
-
-    config = EnhancedPipelineConfig()
-    pipeline = EnhancedPipeline(config)
-    pipeline._filter_graph(graph, verified_ids)
-
-    # e3 should be removed, and edge r2 (which references e3) should also be removed
-    assert len(graph.nodes) == 2
-    assert 'e1' in graph.nodes
-    assert 'e2' in graph.nodes
-    assert 'e3' not in graph.nodes
-
-    assert len(graph.edges) == 1
-    assert 'r1' in graph.edges  # e1 -> e2: both verified
-    assert 'r2' not in graph.edges  # e2 -> e3: e3 not verified
-
-
 if __name__ == '__main__':
-    print('=' * 50)
-    print('Testing the 0-edges bug fix')
-    print('=' * 50)
-
-    print('\nTest 1: add_edge should fail without nodes')
-    try:
-        graph = KnowledgeGraph()
-        edge = make_edge('edge_001', 'entity_001', 'entity_002')
-        graph.add_edge(edge)
-        print('❌ FAILED')
-    except ValueError:
-        print('✅ PASSED')
-
-    print('\nTest 2: add_edge should succeed with nodes')
+    test_add_edge_requires_nodes()
     test_add_edge_succeeds_with_nodes()
-    print('✅ PASSED')
-
-    print('\nTest 3: Pipeline flow simulation')
     test_pipeline_order_fix()
-    print('✅ PASSED')
-
-    print('\nTest 4: _filter_graph removes edges correctly')
-    test_filter_graph_removes_edges_to_filtered_nodes()
-    print('✅ PASSED')
-
-    print('\n' + '=' * 50)
-    print('ALL TESTS PASSED!')
-    print('=' * 50)
+    print('ALL TESTS PASSED')

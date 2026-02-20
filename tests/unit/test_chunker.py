@@ -13,8 +13,8 @@ class TestChunker:
     def test_create_chunker(self):
         """Test creating chunker with default settings."""
         chunker = Chunker()
-        assert chunker.chunk_size == 512
-        assert chunker.chunk_overlap == 75
+        assert chunker.chunk_size == 6000
+        assert chunker.chunk_overlap == 900
 
     def test_create_chunker_custom(self):
         """Test creating chunker with custom settings."""
@@ -24,7 +24,7 @@ class TestChunker:
 
     def test_chunk_short_text(self):
         """Test chunking text shorter than chunk size."""
-        chunker = Chunker(chunk_size=512)
+        chunker = Chunker(chunk_size=6000, chunk_overlap=900)
         text = "This is a short text."
         chunks = chunker.chunk(text, "doc_001")
 
@@ -61,7 +61,7 @@ Third paragraph to make text longer."""
 
     def test_chunk_ids_are_unique(self):
         """Test that chunk IDs are unique."""
-        chunker = Chunker(chunk_size=50)
+        chunker = Chunker(chunk_size=50, chunk_overlap=10)
         text = "Word " * 100
         chunks = chunker.chunk(text, "doc_001")
 

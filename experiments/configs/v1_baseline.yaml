@@ -1,0 +1,22 @@
+experiment:
+  name: "v1-baseline"
+  date: "2026-02-19"
+  description: "CocoIndex-style single-call extraction, 512-char chunks, no ER"
+  status: "superseded_by: v4_large_chunk"
+
+extraction:
+  model: "gemini/gemini-2.0-flash"
+  chunk_size: 512       # chars (~128 tokens) — length_function=len counts chars
+  chunk_overlap: 75
+  mode: "single_pass"
+
+resolution:
+  method: "none"
+
+results_summary:
+  threads_cv:
+    entities: 113
+    core_node_recall: 1.0
+    all_node_recall: 1.0
+    core_edge_recall: 0.5
+    all_edge_recall: 0.267

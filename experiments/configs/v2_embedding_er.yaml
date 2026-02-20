@@ -1,0 +1,31 @@
+experiment:
+  name: "v2-embedding-er"
+  date: "2026-02-20"
+  description: "iText2KG-style embedding cosine similarity ER on 512-char chunks"
+  status: "superseded_by: v3_graphiti_er"
+  adr: "ADR-0004 (Superseded)"
+
+extraction:
+  model: "gemini/gemini-2.0-flash"
+  chunk_size: 512
+  chunk_overlap: 75
+  mode: "single_pass"
+
+resolution:
+  method: "embedding_cosine"
+  model: "sentence-transformers/all-MiniLM-L6-v2"
+  threshold_tested:
+    - value: 0.8
+      result: "113→78 entities, under-merge"
+    - value: 0.6
+      result: "113→24 entities, catastrophic over-merge (core recall 12.5%)"
+
+results_summary:
+  threads_cv_theta_0_8:
+    entities: 78
+    core_node_recall: 0.625
+    note: "Under-merge — many duplicates not caught"
+  threads_cv_theta_0_6:
+    entities: 24
+    core_node_recall: 0.125
+    note: "Over-merge — wait(), signal(), Lock, Mutex all collapsed"

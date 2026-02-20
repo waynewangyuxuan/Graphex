@@ -43,3 +43,5 @@ Proposed → Accepted → [Deprecated | Superseded]
 | [ADR-0003](ADR-0003-cocoindex-style-structured-extraction.md) | CocoIndex-Style Structured Extraction | Accepted | 2026-02-19 |
 | [ADR-0004](ADR-0004-embedding-entity-resolution.md) | Embedding-Based Entity Resolution (iText2KG Pattern) | Superseded | 2026-02-19 |
 | [ADR-0005](ADR-0005-graphiti-cascading-er.md) | Graphiti-Style Cascading Entity Resolution | Accepted | 2026-02-20 |
+| [ADR-0006](ADR-0006-tiered-model-strategy.md) | Tiered Model Strategy | Accepted | 2026-02-20 |
+| [ADR-0007](ADR-0007-experiment-organization.md) | Experiment Organization and Dead Code Cleanup | Accepted | 2026-02-20 |

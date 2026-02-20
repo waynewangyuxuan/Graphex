@@ -1,0 +1,30 @@
+experiment:
+  name: "v5-flash-lite"
+  date: "2026-02-20"
+  description: "Gemini 2.5 Flash Lite model + 6000-char chunks + Graphiti ER"
+  status: "current_best"
+  adr: "ADR-0006"
+
+extraction:
+  model: "gemini/gemini-2.5-flash-lite-preview-09-2025"
+  chunk_size: 6000
+  chunk_overlap: 900
+  mode: "single_pass"
+
+resolution:
+  method: "cascading"
+  jaccard_threshold: 0.9
+  entropy_threshold: 1.5
+  llm_model: "gemini/gemini-2.5-flash-lite-preview-09-2025"
+
+results_summary:
+  threads_cv:
+    entities: 40
+    core_node_recall: 0.875       # 7/8
+    all_node_recall: 0.882        # 15/17
+    core_edge_recall: 0.5         # 4/8
+    all_edge_recall: 0.267        # 4/15
+    input_tokens: 14657
+    output_tokens: 9153
+    missed_core: ["use while loop rule"]
+    note: "Higher recall but more entities; non-schema edge types (Uses, Requires, Method)"

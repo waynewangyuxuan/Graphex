@@ -1,0 +1,25 @@
+experiment:
+  name: "v3-graphiti-er"
+  date: "2026-02-20"
+  description: "Graphiti-style cascading ER on 512-char chunks"
+  status: "superseded_by: v4_large_chunk"
+  adr: "ADR-0005"
+
+extraction:
+  model: "gemini/gemini-2.0-flash"
+  chunk_size: 512
+  chunk_overlap: 75
+  mode: "single_pass"
+
+resolution:
+  method: "cascading"       # exact → entropy-gated Jaccard → LLM batch dedup
+  jaccard_threshold: 0.9
+  entropy_threshold: 1.5
+  llm_model: "gemini/gemini-2.0-flash"
+
+results_summary:
+  threads_cv:
+    entities: 67
+    core_node_recall: 0.5
+    all_node_recall: 0.647
+    core_edge_recall: 0.25

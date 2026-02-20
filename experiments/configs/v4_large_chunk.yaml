@@ -1,0 +1,28 @@
+experiment:
+  name: "v4-large-chunk"
+  date: "2026-02-20"
+  description: "6000-char chunks (~1500 tokens) + Graphiti cascading ER"
+  status: "superseded_by: v5_flash_lite"
+
+extraction:
+  model: "gemini/gemini-2.0-flash"
+  chunk_size: 6000       # chars (~1500 tokens)
+  chunk_overlap: 900     # ~15%
+  mode: "single_pass"
+
+resolution:
+  method: "cascading"
+  jaccard_threshold: 0.9
+  entropy_threshold: 1.5
+  llm_model: "gemini/gemini-2.0-flash"
+
+results_summary:
+  threads_cv:
+    entities: 18
+    core_node_recall: 0.875
+    all_node_recall: 0.706
+    core_edge_recall: 0.375
+    all_edge_recall: 0.267
+    input_tokens: 14649
+    output_tokens: 5314
+    note: "Chunk size was the bigger lever — source fix > downstream repair"
