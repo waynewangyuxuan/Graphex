@@ -41,4 +41,5 @@ Proposed → Accepted → [Deprecated | Superseded]
 | [ADR-0001](ADR-0001-multi-agent-pipeline-architecture.md) | Multi-Agent Pipeline Architecture | Proposed | 2026-02-01 |
 | [ADR-0002](ADR-0002-gleaning-and-entity-resolution.md) | Gleaning and Description-Aggregation Entity Resolution | Proposed | 2026-02-18 |
 | [ADR-0003](ADR-0003-cocoindex-style-structured-extraction.md) | CocoIndex-Style Structured Extraction | Accepted | 2026-02-19 |
-| [ADR-0004](ADR-0004-embedding-entity-resolution.md) | Embedding-Based Entity Resolution (iText2KG Pattern) | Accepted | 2026-02-19 |
+| [ADR-0004](ADR-0004-embedding-entity-resolution.md) | Embedding-Based Entity Resolution (iText2KG Pattern) | Superseded | 2026-02-19 |
+| [ADR-0005](ADR-0005-graphiti-cascading-er.md) | Graphiti-Style Cascading Entity Resolution | Accepted | 2026-02-20 |

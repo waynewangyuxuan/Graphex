@@ -1,6 +1,6 @@
 # ADR-0004: Embedding-Based Entity Resolution (iText2KG Pattern)
 
-- **Status**: Accepted
+- **Status**: Superseded by [ADR-0005](ADR-0005-graphiti-cascading-er.md)
 - **Date**: 2026-02-19
 - **Deciders**: Wayne Wang
 
