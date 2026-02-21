@@ -1,0 +1,18 @@
+experiment:
+  name: "v8-progressive"
+  date: "2026-02-20"
+  description: "Progressive Understanding pipeline (ADR-0008): Skim → Sequential Chunk Extraction → Consolidation. Single model (Lite) for all phases."
+  hypothesis: "Providing progressive context (document schema, accumulating narrative, entity registry) will improve edge quality over one-shot extraction, even with a cheaper model."
+  baseline: "v7-two-pass"
+  status: "planned"
+
+extraction:
+  mode: "progressive"
+  model: "gemini/gemini-2.5-flash-lite-preview-09-2025"
+  skip_consolidation: false
+
+resolution:
+  method: "none"
+
+evaluation:
+  datasets: ["threads-cv"]
