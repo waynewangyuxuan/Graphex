@@ -1,0 +1,18 @@
+experiment:
+  name: "v7-two-pass"
+  date: "2026-02-20"
+  description: "Two-pass extraction: entities with Flash Lite (cheap), relations with Flash (strong). Tests ADR-0006 tiered model strategy."
+  hypothesis: "Using a stronger model for relation extraction will improve edge recall while entity quality stays the same."
+  status: "completed"
+
+extraction:
+  mode: "two_pass"
+  entity_model: "gemini/gemini-2.5-flash-lite-preview-09-2025"
+  relation_model: "gemini/gemini-2.5-flash"
+
+resolution:
+  method: "none"
+
+evaluation:
+  datasets: ["threads-cv"]
+  baseline: "v6-whole-doc"  # compare against

@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Two-Pass Extraction (v7)** (2026-02-20)
+  - `src/extraction/two_pass_extractor.py`: Pass 1 entities (Flash Lite) → Pass 2 relations (Flash)
+  - `experiments/runners/run_two_pass.py`: Two-pass experiment runner
+  - `experiments/configs/v7_two_pass.yaml`: Experiment config for ADR-0006 tiered model strategy
+  - New prompts: `ENTITY_ONLY_PROMPT` (entity-only extraction), `RELATION_PROMPT_TEMPLATE` (relation extraction with direction guidance)
+  - Result: 87.5% core node recall (same as v6), 37.5% core edge recall (same as v6), but 2x token cost — stronger model did not improve edge quality
 - **Config-Driven Experiment Organization** (2026-02-20)
   - `experiments/configs/`: YAML configs for all experiments (v1-v6), versioned and committed
   - `experiments/runners/`: Config-driven extraction and evaluation runners

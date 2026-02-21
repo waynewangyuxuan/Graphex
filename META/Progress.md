@@ -113,6 +113,36 @@ Append-only development log. Add new entries at the top.
   - 语义类型错误：State Variable→CV 标为 "Before"（应为 Enables），CV→Lock 标为 "PartOf"（GT 为 Enables）
   - 实际匹配 GT 的边仅 4 条：wait()→CV PartOf, signal()→CV PartOf, Bounded Buffer→P/C PartOf, Mesa→Hoare Contrasts
 
+- **v7 Two-Pass 提取实验（ADR-0006 Tiered Model Strategy）**
+  - 假设：用便宜模型（Flash Lite）提取实体，用更强模型（Flash）提取关系，可以改善边质量
+  - Pass 1: Entity-only prompt + Flash Lite → 23 entities
+  - Pass 2: Relation prompt (带 Pass 1 实体列表) + Flash → 30 relationships (0 dropped)
+  - 创建 `src/extraction/two_pass_extractor.py`、`experiments/runners/run_two_pass.py`、`experiments/configs/v7_two_pass.yaml`
+  - 新增 prompts: `ENTITY_ONLY_PROMPT`（Pass 1）、`RELATION_PROMPT_TEMPLATE`（Pass 2，含方向指导）
+
+- **v7 实验结果（threads-cv）**
+
+| 指标 | v6 整文档 | **v7 Two-Pass** | 变化 | 目标 |
+|---|---|---|---|---|
+| 实体数 | 20 | **23** | +3 | ~17 |
+| 核心节点召回 | 87.5% (7/8) | **87.5% (7/8)** | 持平 | >60% |
+| 全部节点召回 | 70.6% (12/17) | **70.6% (12/17)** | 持平 | — |
+| 核心边召回 | 37.5% (3/8) | **37.5% (3/8)** | 持平 | >60% |
+| 全部边召回 | 26.7% (4/15) | **20.0% (3/15)** | -1 条 | — |
+| 提取边数 | 19 | **30** | +11 | — |
+| Input tokens | 11,504 | **23,634** | +2.1x | — |
+| Output tokens | 2,481 | **12,379** | +5x | — |
+
+- **v7 根因分析 — 更多边但更低召回**
+  - **过度生成 Supports 边**：6 条研究者归因边（Dijkstra→CV, Hoare→CV, Lampson&Redell→Mesa 等），GT 显式排除了这类边
+  - **实体命名不匹配**：提取 "Lock" 但 GT 期望 "Lock/Mutex"，evaluator substring matching 匹配失败
+  - **核心实体缺失级联**："Use While Loop Rule" 未提取 → 阻断 Mesa→WhileLoopRule [Causes] 核心边
+  - **关系方向反转**：Lock→CV [Enables] vs GT 的 CV→Lock [Enables]
+  - **关系类型混淆**：IsA vs PartOf 混用（Bounded Buffer / Producer-Consumer）
+  - **Causes 类型边几乎完全缺失**：Producer→Buffer、Consumer→Buffer 均未识别
+  - 匹配的 3 条边：wait()→CV [PartOf], signal()→CV [PartOf], Mesa→CV [HasProperty]
+  - **结论**：瓶颈不在模型能力，而在 (1) Pass 1 实体集质量级联 (2) Supports 类型过度生成 (3) evaluator 匹配逻辑过严
+
 ### Decisions Made
 - **Abandon embedding cosine similarity for ER** — 无法在 under-merge 和 over-merge 之间找到平衡点（ADR-0004 → Superseded）
 - **Adopt Graphiti-style cascading ER** — 确定性优先、LLM 兜底的三层方法 (ADR-0005)
@@ -122,14 +152,15 @@ Append-only development log. Add new entries at the top.
 - **整文档提取可行但边质量受限** — 实体质量已达标（20 entities, 87.5% core recall），但边的方向和类型判断是 Flash Lite 模型能力瓶颈
 
 ### Blockers / Issues
-- 边召回仍未达标（37.5% core vs 目标 >60%）— 根因是 Flash Lite 的边类型/方向判断弱，非 prompt 可完全解决
-- Eval 子串匹配过于严格 — "Wait Must Re-check Condition" vs "Use While Loop Rule" 无法匹配
-- Flash Lite 产出非法 edge type（"Claim" 作为边类型）— 需要后处理校验或更强模型
+- 边召回仍未达标（37.5% core vs 目标 >60%）— v7 two-pass 证明更强模型不是银弹
+- Eval 子串匹配过于严格 — "Wait Must Re-check Condition" vs "Use While Loop Rule" 无法匹配，"Lock" vs "Lock/Mutex" 也无法匹配
+- 模型过度生成 Supports 研究者归因边（6/30 = 20% 的提取边是噪声）
 
 ### Next
 - [ ] 增强 eval 匹配逻辑（模糊匹配 / synonym 映射 / 双向边匹配），减少假阴性
 - [ ] 边方向归一化：PartOf 等方向敏感的边类型考虑双向匹配或规范化
-- [ ] 边质量提升策略：用更强模型（Flash / Pro）做边提取，或加 edge-level 后处理校验
+- [ ] Prompt 约束 Supports 类型：明确禁止研究者归因边，或在后处理中过滤
+- [ ] 实体集质量提升：确保 "Use While Loop Rule" 等核心实体被提取
 - [ ] 清理 requirements.txt 中不再需要的 embedding 依赖
 - [ ] 在 MiroThinker 和 threads-bugs 上验证泛化性
 
