@@ -25,11 +25,13 @@ def run(
     model: str = "gemini/gemini-2.5-flash-lite-preview-09-2025",
     experiment_name: str = "v9-narrative",
     skip_review: bool = False,
+    skip_tree: bool = False,
 ):
     print(f"\n{'='*60}")
     print(f"Narrative Structure Extraction: {pdf_path.name}")
     print(f"Model: {model}")
     print(f"Review: {'SKIP' if skip_review else 'ON'}")
+    print(f"Tree: {'SKIP' if skip_tree else 'ON'}")
     print(f"{'='*60}\n")
 
     # Parse PDF
@@ -40,7 +42,7 @@ def run(
 
     # Run pipeline
     start_time = time.time()
-    result = extract_narrative(doc.content, model=model, skip_review=skip_review)
+    result = extract_narrative(doc.content, model=model, skip_review=skip_review, skip_tree=skip_tree)
     elapsed = time.time() - start_time
 
     # ── Phase 0 report ──
@@ -156,6 +158,44 @@ def run(
         else:
             print(f"  {s['id']}: NO ANCHOR \"{anchor}...\"")
 
+    # ── Tree report ──
+    tree = result.get("tree")
+    if tree:
+        meta = tree.get("meta", {})
+        print(f"\n--- Tree Structure ---")
+        print(f"  Root: {tree.get('title', '?')}")
+        print(f"  Acts: {meta.get('acts', 0)}")
+        print(f"  Spine segments: {meta.get('spine_segments', 0)}")
+        print(f"  Branch segments: {meta.get('branch_segments', 0)}")
+        print(f"  See-also links: {meta.get('see_also_count', 0)}")
+        if result["tokens"].get("tree_input"):
+            print(f"  Tree tokens: in={result['tokens']['tree_input']}, out={result['tokens']['tree_output']}")
+
+        # Print tree structure
+        def print_tree(node, indent=0, prefix=""):
+            t = node.get("type", "")
+            title = node.get("title", "")
+            spine = " [SPINE]" if node.get("spine") else ""
+            rel = f" ←{node['rel']}" if node.get("rel") else ""
+            sa = f" (see_also: {len(node['see_also'])})" if node.get("see_also") else ""
+
+            if t == "root":
+                print(f"  {title}")
+            elif t == "act":
+                print(f"  {'  ' * indent}{prefix}{title}")
+            else:
+                print(f"  {'  ' * indent}{prefix}{node.get('id', '?')} [{t}] {title}{spine}{rel}{sa}")
+
+            for i, child in enumerate(node.get("children", [])):
+                is_last = i == len(node.get("children", [])) - 1
+                child_prefix = "└─ " if is_last else "├─ "
+                print_tree(child, indent + 1, child_prefix)
+
+        print()
+        print_tree(tree)
+    else:
+        print(f"\n--- Tree: skipped ---")
+
     # ── Summary ──
     n_seg = len(segments)
     n_rel = len(relations)
@@ -208,6 +248,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Narrative Structure extraction")
     parser.add_argument("--model", default="gemini/gemini-2.5-flash-lite-preview-09-2025")
     parser.add_argument("--skip-review", action="store_true", help="Skip LLM review pass")
+    parser.add_argument("--skip-tree", action="store_true", help="Skip tree structuring pass")
     args = parser.parse_args()
 
     pdf_path = project_root / "sample-files" / "threads-cv.pdf"
@@ -216,4 +257,4 @@ if __name__ == "__main__":
         print(f"ERROR: PDF not found at {pdf_path}")
         sys.exit(1)
 
-    run(pdf_path, model=args.model, skip_review=args.skip_review)
+    run(pdf_path, model=args.model, skip_review=args.skip_review, skip_tree=args.skip_tree)

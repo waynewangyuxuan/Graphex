@@ -191,6 +191,69 @@ If the same concept appears under different labels (e.g., "wait()" and "pthread_
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# TREE STRUCTURING: Convert flat graph → hierarchical reading tree
+# ═══════════════════════════════════════════════════════════════════════════
+
+NARRATIVE_TREE_PROMPT = """You are converting a narrative graph (flat list of segments + discourse relations) into a hierarchical READING TREE — a mind-map structure that a student can follow from top to bottom.
+
+## Document context
+Topic: {topic}
+Theme: {theme}
+Learning arc: {learning_arc}
+
+## Current segments (in narrative order)
+{all_segments}
+
+## Current relations
+{all_relations}
+
+## Your task
+
+Organize these segments into a TREE with this structure:
+
+### 1. Identify the SPINE (main reading path)
+The spine is the sequence of segments that form the author's main argument — if a student only reads the spine, they get the core story. Typically 40-60% of all segments.
+
+Spine segments are usually: the opening problem, major mechanism introductions, key rules, turning points, final resolution, and summary. They advance the narrative.
+
+NON-spine segments are: supporting examples, elaborations, tangential details, traces, figures, sub-problems that go deeper on one point. They enrich but are not required for the main story.
+
+### 2. Assign PARENT for each non-spine segment
+Each branch segment hangs off one parent (usually a spine node). Pick the parent that best answers "this segment is a deeper look at ___".
+
+### 3. Group spine into ACTS
+Divide the spine into 2-5 acts based on major topic transitions. Give each act a short title.
+
+### 4. Identify BACK-REFERENCES
+Some relations point from a later segment back to an earlier one (e.g., contrasts, references). These don't fit the tree hierarchy. List them as see_also.
+
+## Output: Return ONLY valid JSON, no markdown fences.
+{
+  "acts": [
+    {
+      "title": "Short act title",
+      "spine_ids": ["s1", "s3", "s5"]
+    }
+  ],
+  "branches": [
+    {
+      "child_id": "s2",
+      "parent_id": "s1",
+      "rel": "elaborates"
+    }
+  ],
+  "see_also": [
+    {
+      "from": "s7",
+      "to": "s3",
+      "type": "contrast",
+      "note": "brief explanation"
+    }
+  ]
+}"""
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # REGISTRY
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -198,4 +261,5 @@ NARRATIVE_PROMPTS = {
     "skim": NARRATIVE_SKIM_PROMPT,
     "chunk_extract": NARRATIVE_CHUNK_TEMPLATE,
     "review": NARRATIVE_REVIEW_PROMPT,
+    "tree": NARRATIVE_TREE_PROMPT,
 }

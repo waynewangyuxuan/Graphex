@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Graph-to-Tree Structuring** (2026-02-21)
+  - `src/transform/graph_to_tree.py`: LLM-based narrative graph → reading tree conversion (spine/branch/act/see-also)
+  - `NARRATIVE_TREE_PROMPT`: Prompt for spine identification, act grouping, and parent assignment
+  - `run_narrative.py`: `--skip-tree` flag and tree visualization in runner output
 - **Narrative Review Pass + Anchor Resolution** (2026-02-21)
   - `src/extraction/narrative_extractor.py`: LLM-based review pass (segment dedup, relation fixes, concept normalization)
   - `src/binding/anchor_resolver.py`: Text-graph binding via 5-tier anchor matching (exact → fuzzy → prefix)

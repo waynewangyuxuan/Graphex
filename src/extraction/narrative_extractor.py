@@ -21,6 +21,7 @@ from src.extraction.narrative_prompts import (
 )
 from src.chunking.programmatic_chunker import chunk_by_sections, Chunk
 from src.binding.anchor_resolver import resolve_anchors, build_segment_ranges
+from src.transform.graph_to_tree import graph_to_tree
 
 
 # ── JSON parsing ──────────────────────────────────────────────────────────
@@ -424,6 +425,7 @@ def extract_narrative(
     document_text: str,
     model: str = "gemini/gemini-2.5-flash-lite-preview-09-2025",
     skip_review: bool = False,
+    skip_tree: bool = False,
 ) -> dict:
     """Run the full Narrative Structure extraction pipeline."""
 
@@ -506,11 +508,29 @@ def extract_narrative(
         "failed": sum(1 for m in anchor_matches if m.confidence == 0.0),
     }
 
+    # Tree structuring: LLM-based graph → tree conversion
+    tree_result = None
+    if not skip_tree and len(segments) > 0:
+        tree_result = graph_to_tree(
+            segments=segments,
+            relations=relations,
+            schema=schema,
+            model=model,
+        )
+        total_tokens["input"] += tree_result["tokens"]["input"]
+        total_tokens["output"] += tree_result["tokens"]["output"]
+        total_tokens["tree_input"] = tree_result["tokens"]["input"]
+        total_tokens["tree_output"] = tree_result["tokens"]["output"]
+
     return {
+        # Graph view (complete)
         "segments": segments,
         "relations": relations,
         "dropped": p1["dropped"],
         "concept_index": concept_index,
+        # Tree view (reading)
+        "tree": tree_result["tree"] if tree_result else None,
+        # Tokens
         "tokens": total_tokens,
         # Review
         "review": review_log,
@@ -523,4 +543,5 @@ def extract_narrative(
             "chunks": chunk_info,
         },
         "phase1": {"per_chunk": p1["per_chunk"]},
+        "tree_decision": tree_result["raw_decision"] if tree_result else None,
     }

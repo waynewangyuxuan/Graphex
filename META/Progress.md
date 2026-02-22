@@ -26,14 +26,28 @@ Append-only development log. Add new entries at the top.
     - 新增 skip non-teaching content 指导
   - `run_narrative.py` 新增 `--skip-review` 参数和 review/anchor 报告输出
 
+- **Graph-to-Tree Structuring（Reading Tree）**
+  - 新增 `src/transform/graph_to_tree.py` — LLM-based 图→树转换:
+    - Spine 识别：LLM 判断哪些 segments 构成主叙事线（通常 40-60%）
+    - Act 分组：将 spine 按主题转换分为 2-5 个 acts
+    - Branch 挂接：非 spine segments 挂到最相关的 spine 节点下
+    - See-also 链接：跨 act 的 back-references 保留为 see_also
+    - Orphan 兜底：未被 LLM 安排的 segments 自动挂到最后一个 act
+  - 新增 `NARRATIVE_TREE_PROMPT`（`src/extraction/narrative_prompts.py`）
+  - `run_narrative.py` 新增 `--skip-tree` 参数和树形结构可视化输出
+  - 设计原则：Graph 是 ground truth（全部 relations），Tree 是 reading view（线性+深度控制）
+
 ### Decisions Made
 - Anchor resolution 使用纯字符串匹配（不需 LLM）— 快速、确定性、可调试
 - Review pass 是可选的（`skip_review=True` 可跳过）— 便于 A/B 对比
 - Open edge types 保留不变 — review 只修正到 preferred types，不强制
+- Graph 和 Tree 是同一数据的两个视图 — graph 保留完整关系，tree 提供可读的层次结构
+- Tree structuring 使用 LLM 而非纯算法 — spine vs branch 判断需要语义理解
 
 ### Next
-- [ ] 运行 v9 narrative 实验，收集 review + anchor 指标
+- [ ] 运行 v9 narrative 实验，收集 review + anchor + tree 指标
 - [ ] 评估 anchor 命中率，决定是否需要更强的 fuzzy matching
+- [ ] 评估 tree spine 选择质量，对比 GT 的 core nodes
 - [ ] 增加第二个 benchmark 文档验证泛化性
 
 ---
