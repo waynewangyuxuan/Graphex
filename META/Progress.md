@@ -4,6 +4,40 @@ Append-only development log. Add new entries at the top.
 
 ---
 
+## 2026-02-21
+
+### Completed
+
+- **Narrative Extractor: Review Pass + Anchor Resolution**
+  - 新增 LLM-based review pass (`review_narrative()` + `apply_review()`):
+    - Segment 去重：检测因 chunk overlap 产生的重复 segments，保留质量更好的
+    - Relation type 修正：统一到 preferred types（motivates, elaborates, exemplifies 等）
+    - Concept label 归一化：合并不同名称的同一概念（如 "wait()" / "pthread_cond_wait"）
+    - Chain merge resolution：A→B, B→C 自动解析为 A→C
+    - 悬挂引用清理：merge 后自动删除指向已移除 segment 的 relations
+  - 新增 `NARRATIVE_REVIEW_PROMPT`（`src/extraction/narrative_prompts.py`）
+  - 新增 `src/binding/anchor_resolver.py` — 文本-图谱双向绑定:
+    - 5 层匹配策略：exact → case-insensitive → normalized whitespace → prefix words → fallback
+    - 按文档顺序约束匹配位置，避免乱序
+    - `build_segment_ranges()` 根据 anchor 位置估算 segment 的文本跨度
+  - 更新 chunk extraction prompt:
+    - 新增 dedup 指导："Check Story so far, don't create duplicates"
+    - 新增 anchor 字段："quote 8-15 words exactly from text"
+    - 新增 skip non-teaching content 指导
+  - `run_narrative.py` 新增 `--skip-review` 参数和 review/anchor 报告输出
+
+### Decisions Made
+- Anchor resolution 使用纯字符串匹配（不需 LLM）— 快速、确定性、可调试
+- Review pass 是可选的（`skip_review=True` 可跳过）— 便于 A/B 对比
+- Open edge types 保留不变 — review 只修正到 preferred types，不强制
+
+### Next
+- [ ] 运行 v9 narrative 实验，收集 review + anchor 指标
+- [ ] 评估 anchor 命中率，决定是否需要更强的 fuzzy matching
+- [ ] 增加第二个 benchmark 文档验证泛化性
+
+---
+
 ## 2026-02-20
 
 ### Completed

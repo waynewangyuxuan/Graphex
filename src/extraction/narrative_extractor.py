@@ -2,14 +2,14 @@
 
 Phase 0: Skim → document schema (topic, theme, learning arc)
 Phase 1: Sequential chunk extraction → narrative segments + discourse relations
+Review: LLM-based final cleanup (dedup, relation fixes, concept normalization)
+Post-processing: anchor resolution for text-graph binding
 
-No Phase 2 consolidation — segments don't suffer from entity dedup problems.
 Chunking is programmatic (fixed-size + overlap).
 """
 
 import json
 import re
-import time
 from typing import Optional
 
 import litellm
@@ -17,8 +17,10 @@ import litellm
 from src.extraction.narrative_prompts import (
     NARRATIVE_SKIM_PROMPT,
     NARRATIVE_CHUNK_TEMPLATE,
+    NARRATIVE_REVIEW_PROMPT,
 )
 from src.chunking.programmatic_chunker import chunk_by_sections, Chunk
+from src.binding.anchor_resolver import resolve_anchors, build_segment_ranges
 
 
 # ── JSON parsing ──────────────────────────────────────────────────────────
@@ -87,7 +89,6 @@ def phase0_skim(
     if estimated_tokens <= full_doc_token_threshold:
         user_content = f"## Full Document\n\n{document_text}"
     else:
-        # For long docs, just pass the opening
         opening_end = int(len(document_text) * 0.15)
         next_break = document_text.find("\n\n", opening_end)
         if 0 < next_break < opening_end * 1.5:
@@ -149,7 +150,6 @@ def phase1_extract_narrative(
         # Process segments
         new_segments = data.get("segments", [])
         for seg in new_segments:
-            # Ensure valid ID
             if not seg.get("id") or seg["id"] in {s["id"] for s in all_segments}:
                 seg["id"] = f"s{next_segment_id}"
                 next_segment_id += 1
@@ -189,7 +189,6 @@ def phase1_extract_narrative(
         all_relations.extend(chunk_relations)
         all_dropped.extend(chunk_dropped)
 
-        # Track tokens
         total_tokens["input"] += result["tokens"]["input"]
         total_tokens["output"] += result["tokens"]["output"]
 
@@ -201,7 +200,6 @@ def phase1_extract_narrative(
             "tokens": result["tokens"],
         })
 
-    # Build concept index
     concept_index = _build_concept_index(all_segments)
 
     return {
@@ -247,12 +245,185 @@ def _build_concept_index(segments: list[dict]) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# REVIEW PASS: LLM-based final cleanup
+# ═══════════════════════════════════════════════════════════════════════════
+
+def review_narrative(
+    schema: dict,
+    segments: list[dict],
+    relations: list[dict],
+    model: str = "gemini/gemini-2.5-flash-lite-preview-09-2025",
+) -> dict:
+    """LLM-based review pass: dedup segments, fix relations, normalize concepts."""
+
+    topic = schema.get("topic", "")
+    theme = schema.get("theme", "")
+
+    # Build segment list for prompt
+    seg_lines = []
+    for s in segments:
+        concepts = ", ".join(c.get("label", "?") for c in s.get("concepts", []))
+        seg_lines.append(
+            f'- {s["id"]} [{s.get("type", "?")}] "{s.get("title", "?")}" '
+            f'— {s.get("content", "")[:150]}'
+            f'\n  concepts: [{concepts}]'
+        )
+    all_segments_str = "\n".join(seg_lines)
+
+    # Build relation list for prompt
+    rel_lines = []
+    for r in relations:
+        rel_lines.append(
+            f'- {r.get("source", "?")} → {r.get("target", "?")} [{r.get("type", "?")}] '
+            f'"{r.get("annotation", "")[:80]}"'
+        )
+    all_relations_str = "\n".join(rel_lines)
+
+    # Collect concept labels
+    concept_labels = set()
+    for s in segments:
+        for c in s.get("concepts", []):
+            concept_labels.add(c.get("label", ""))
+    concept_labels_str = ", ".join(sorted(concept_labels - {""}))
+
+    # Fill prompt
+    prompt = NARRATIVE_REVIEW_PROMPT
+    prompt = prompt.replace("{topic}", topic)
+    prompt = prompt.replace("{theme}", theme)
+    prompt = prompt.replace("{all_segments}", all_segments_str)
+    prompt = prompt.replace("{all_relations}", all_relations_str)
+    prompt = prompt.replace("{concept_labels}", concept_labels_str)
+
+    result = _call_llm(prompt, "Please review.", model, max_tokens=4096)
+
+    return {
+        "data": result["data"],
+        "tokens": result["tokens"],
+        "raw": result["raw"],
+    }
+
+
+def apply_review(
+    segments: list[dict],
+    relations: list[dict],
+    review_data: dict,
+) -> tuple[list[dict], list[dict], dict]:
+    """Apply LLM review results to the narrative graph.
+
+    Returns: (updated_segments, updated_relations, applied_log)
+    """
+    applied_log = {
+        "segment_merges": [],
+        "relation_fixes": [],
+        "concept_merges": [],
+    }
+
+    # 1. Apply segment merges
+    merge_map: dict[str, str] = {}  # removed_id → kept_id
+    remove_ids: set[str] = set()
+
+    for merge in review_data.get("segment_merges", []):
+        keep_id = merge.get("keep_id", "")
+        remove_id = merge.get("remove_id", "")
+        # Validate both IDs exist
+        seg_ids = {s["id"] for s in segments}
+        if keep_id in seg_ids and remove_id in seg_ids and keep_id != remove_id:
+            merge_map[remove_id] = keep_id
+            remove_ids.add(remove_id)
+            applied_log["segment_merges"].append(merge)
+
+    # Filter segments
+    merged_segments = [s for s in segments if s["id"] not in remove_ids]
+
+    # Resolve chain merges: if A→B and B→C, then A→C
+    # This prevents dangling references when merges cascade
+    def _resolve_chain(merge_map: dict[str, str]) -> dict[str, str]:
+        resolved = {}
+        for src, tgt in merge_map.items():
+            seen = {src}
+            cur = tgt
+            while cur in merge_map and cur not in seen:
+                seen.add(cur)
+                cur = merge_map[cur]
+            resolved[src] = cur
+        return resolved
+
+    merge_map = _resolve_chain(merge_map)
+
+    # Remap relations
+    def remap(sid: str) -> str:
+        return merge_map.get(sid, sid)
+
+    merged_rels = []
+    seen_rel_keys = set()
+    for rel in relations:
+        new_src = remap(rel.get("source", ""))
+        new_tgt = remap(rel.get("target", ""))
+
+        if new_src == new_tgt:
+            continue
+
+        key = (new_src, new_tgt, rel.get("type", ""))
+        if key in seen_rel_keys:
+            continue
+        seen_rel_keys.add(key)
+
+        rel_copy = dict(rel)
+        rel_copy["source"] = new_src
+        rel_copy["target"] = new_tgt
+        merged_rels.append(rel_copy)
+
+    # Post-merge validation: drop relations pointing to removed segments
+    valid_ids = {s["id"] for s in merged_segments}
+    pre_count = len(merged_rels)
+    merged_rels = [r for r in merged_rels
+                   if r.get("source") in valid_ids and r.get("target") in valid_ids]
+    if len(merged_rels) < pre_count:
+        applied_log["dangling_dropped"] = pre_count - len(merged_rels)
+
+    # 2. Apply relation type fixes
+    for fix in review_data.get("relation_fixes", []):
+        if fix.get("action") == "change_type":
+            src = fix.get("source", "")
+            tgt = fix.get("target", "")
+            old_type = fix.get("old_type", "")
+            new_type = fix.get("new_type", "")
+
+            for rel in merged_rels:
+                if (rel.get("source") == src and rel.get("target") == tgt
+                        and rel.get("type") == old_type):
+                    rel["type"] = new_type
+                    rel["_review_fix"] = True
+                    applied_log["relation_fixes"].append(fix)
+                    break
+
+    # 3. Apply concept label normalization
+    concept_rename_map: dict[str, str] = {}  # old_label → new_label
+    for cm in review_data.get("concept_merges", []):
+        keep = cm.get("keep_label", "")
+        remove = cm.get("remove_label", "")
+        if keep and remove and keep != remove:
+            concept_rename_map[remove] = keep
+            applied_log["concept_merges"].append(cm)
+
+    if concept_rename_map:
+        for seg in merged_segments:
+            for concept in seg.get("concepts", []):
+                old_label = concept.get("label", "")
+                if old_label in concept_rename_map:
+                    concept["label"] = concept_rename_map[old_label]
+
+    return merged_segments, merged_rels, applied_log
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # FULL PIPELINE
 # ═══════════════════════════════════════════════════════════════════════════
 
 def extract_narrative(
     document_text: str,
     model: str = "gemini/gemini-2.5-flash-lite-preview-09-2025",
+    skip_review: bool = False,
 ) -> dict:
     """Run the full Narrative Structure extraction pipeline."""
 
@@ -265,6 +436,41 @@ def extract_narrative(
 
     # Phase 1: Sequential narrative extraction
     p1 = phase1_extract_narrative(document_text, schema, chunks, model=model)
+
+    segments = p1["segments"]
+    relations = p1["relations"]
+
+    # Review pass: LLM-based cleanup
+    review_result = None
+    review_log = None
+    if not skip_review and len(segments) > 0:
+        review_result = review_narrative(schema, segments, relations, model=model)
+        segments, relations, review_log = apply_review(
+            segments, relations, review_result["data"]
+        )
+
+    # Anchor resolution: map segments to source text positions
+    anchor_matches = resolve_anchors(document_text, segments)
+    segment_ranges = build_segment_ranges(document_text, segments, anchor_matches)
+
+    # Attach ranges to segments (with end >= start guard)
+    range_map = {r["segment_id"]: r for r in segment_ranges}
+    for seg in segments:
+        rng = range_map.get(seg["id"])
+        if rng and rng["start_char"] >= 0:
+            end = rng["end_char"]
+            start = rng["start_char"]
+            # Guard: end must be >= start
+            if end < start:
+                end = min(start + 2000, len(document_text))
+            seg["source_range"] = {
+                "start_char": start,
+                "end_char": end,
+                "confidence": rng["confidence"],
+            }
+
+    # Rebuild concept index after review
+    concept_index = _build_concept_index(segments)
 
     # Build chunk info
     chunk_info = [
@@ -286,13 +492,29 @@ def extract_narrative(
         "phase1_input": p1["tokens"]["input"],
         "phase1_output": p1["tokens"]["output"],
     }
+    if review_result:
+        total_tokens["input"] += review_result["tokens"]["input"]
+        total_tokens["output"] += review_result["tokens"]["output"]
+        total_tokens["review_input"] = review_result["tokens"]["input"]
+        total_tokens["review_output"] = review_result["tokens"]["output"]
+
+    # Anchor resolution stats
+    anchor_stats = {
+        "total": len(anchor_matches),
+        "exact": sum(1 for m in anchor_matches if m.confidence == 1.0),
+        "fuzzy": sum(1 for m in anchor_matches if 0 < m.confidence < 1.0),
+        "failed": sum(1 for m in anchor_matches if m.confidence == 0.0),
+    }
 
     return {
-        "segments": p1["segments"],
-        "relations": p1["relations"],
+        "segments": segments,
+        "relations": relations,
         "dropped": p1["dropped"],
-        "concept_index": p1["concept_index"],
+        "concept_index": concept_index,
         "tokens": total_tokens,
+        # Review
+        "review": review_log,
+        "anchors": anchor_stats,
         # Intermediate
         "phase0": {"schema": schema},
         "chunking": {

@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Narrative Review Pass + Anchor Resolution** (2026-02-21)
+  - `src/extraction/narrative_extractor.py`: LLM-based review pass (segment dedup, relation fixes, concept normalization)
+  - `src/binding/anchor_resolver.py`: Text-graph binding via 5-tier anchor matching (exact → fuzzy → prefix)
+  - `NARRATIVE_REVIEW_PROMPT`: Review prompt for post-extraction cleanup
+  - Updated chunk extraction prompt with dedup guidance, anchor phrases, and non-teaching content filtering
+  - `run_narrative.py`: `--skip-review` flag, review + anchor reporting
 - **Two-Pass Extraction (v7)** (2026-02-20)
   - `src/extraction/two_pass_extractor.py`: Pass 1 entities (Flash Lite) → Pass 2 relations (Flash)
   - `experiments/runners/run_two_pass.py`: Two-pass experiment runner
