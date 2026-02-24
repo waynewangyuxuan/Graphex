@@ -54,7 +54,7 @@ Learning arc: {learning_arc}
 
 Read the section below and extract its NARRATIVE SEGMENTS — the rhetorical building blocks of the author's argument.
 
-A segment is a coherent unit of the author's teaching: a problem statement, a mechanism explanation, an example, a rule, etc. Most sections contain 2-5 segments.
+A segment is a coherent unit of the author's teaching: a problem statement, a mechanism explanation, an example, a rule, etc. Each segment should cover a COMPLETE argumentative unit — not a single sentence or detail, but a full point the author is making (often spanning multiple paragraphs). Aim for 5-8 segments per section. If you find yourself producing more than 10, you are slicing too finely — merge related details into broader narrative units.
 
 ### CRITICAL: Dedup with existing segments
 This section may OVERLAP with the previous section. Check the "Story so far" list carefully.

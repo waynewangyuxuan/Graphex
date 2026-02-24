@@ -24,6 +24,40 @@ from src.binding.anchor_resolver import resolve_anchors, build_segment_ranges
 from src.transform.graph_to_tree import graph_to_tree
 
 
+# ── PDF text pre-processing ──────────────────────────────────────────────
+
+def _preprocess_pdf_text(text: str) -> str:
+    """Clean PDF-parsed text to improve LLM extraction reliability.
+
+    Targets:
+    - U+FFFD replacement characters (failed PDF glyph conversions)
+    - Ligature normalization (ﬁ→fi, ﬂ→fl, ﬀ→ff, etc.)
+    - Excessive whitespace from column layouts
+    """
+    # 1. Remove U+FFFD replacement characters (PDF parsing artifacts)
+    #    These are unrecoverable — better to remove than confuse LLM
+    text = text.replace("\ufffd", "")
+
+    # 2. Normalize common ligatures from PDF rendering
+    ligatures = {
+        "\ufb01": "fi",  # ﬁ
+        "\ufb02": "fl",  # ﬂ
+        "\ufb00": "ff",  # ﬀ
+        "\ufb03": "ffi", # ﬃ
+        "\ufb04": "ffl", # ﬄ
+    }
+    for lig, replacement in ligatures.items():
+        text = text.replace(lig, replacement)
+
+    # 3. Collapse runs of 3+ spaces (PDF column artifacts) to single space
+    text = re.sub(r" {3,}", " ", text)
+
+    # 4. Remove null bytes and other control characters (except \n, \t, \r)
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)
+
+    return text
+
+
 # ── JSON parsing ──────────────────────────────────────────────────────────
 
 def _clean_json_text(text: str) -> str:
@@ -53,6 +87,73 @@ def _parse_json(text: str) -> dict:
             except json.JSONDecodeError:
                 pass
         return {}
+
+
+def _salvage_segments(raw: str) -> list[dict]:
+    """Try to extract segments from malformed/truncated JSON output.
+
+    When the LLM produces output that can't be parsed as complete JSON
+    (common with math-heavy papers), we try to extract individual segment
+    objects from the raw text.
+    """
+    if not raw:
+        return []
+
+    # Strategy 1: Find the segments array and try to parse it in isolation
+    seg_match = re.search(r'"segments"\s*:\s*\[', raw)
+    if not seg_match:
+        return []
+
+    # Extract from segments array start to the end
+    array_start = raw.index("[", seg_match.start())
+    # Try to find the matching closing bracket
+    depth = 0
+    end_pos = -1
+    for i in range(array_start, len(raw)):
+        if raw[i] == "[":
+            depth += 1
+        elif raw[i] == "]":
+            depth -= 1
+            if depth == 0:
+                end_pos = i + 1
+                break
+
+    if end_pos > 0:
+        array_text = raw[array_start:end_pos]
+    else:
+        # Array was truncated — try to close it
+        # Find last complete object (ending with })
+        last_obj_end = raw.rfind("}")
+        if last_obj_end > array_start:
+            array_text = raw[array_start:last_obj_end + 1] + "]"
+        else:
+            return []
+
+    # Clean and parse
+    array_text = _clean_json_text(array_text)
+    try:
+        segments = json.loads(array_text)
+        if isinstance(segments, list):
+            # Validate: each item should have at minimum id and title
+            valid = [s for s in segments
+                     if isinstance(s, dict) and (s.get("id") or s.get("title"))]
+            return valid
+    except json.JSONDecodeError:
+        pass
+
+    # Strategy 2: Extract individual segment objects via regex
+    # Match {"id": "s...", ...} patterns
+    segments = []
+    obj_pattern = re.compile(r'\{[^{}]*"id"\s*:\s*"s\d+"[^{}]*\}')
+    for match in obj_pattern.finditer(raw):
+        try:
+            obj = json.loads(match.group())
+            if obj.get("id") and obj.get("title"):
+                segments.append(obj)
+        except json.JSONDecodeError:
+            continue
+
+    return segments
 
 
 def _call_llm(system: str, user: str, model: str, max_tokens: int = 4096) -> dict:
@@ -148,8 +249,44 @@ def phase1_extract_narrative(
         result = _call_llm(prompt, user_content, model, max_tokens=8192)
         data = result["data"]
 
-        # Process segments
+        # Detect parsing failures: LLM produced output but no segments parsed
         new_segments = data.get("segments", [])
+        if not new_segments and result["tokens"]["output"] > 100:
+            raw_preview = result["raw"][:500] if result["raw"] else "(empty)"
+            print(f"  [extract] WARNING: chunk {chunk.chunk_id} produced 0 segments "
+                  f"but used {result['tokens']['output']} output tokens!")
+            print(f"  [extract] Raw output preview: {raw_preview}")
+
+            # Attempt salvage: try to extract segments from truncated/malformed JSON
+            raw = result["raw"] or ""
+            salvaged = _salvage_segments(raw)
+            if salvaged:
+                print(f"  [extract] Salvaged {len(salvaged)} segments from malformed output")
+                new_segments = salvaged
+            else:
+                # Retry once: the first failure is often due to math-heavy content
+                # causing JSON formatting issues in the LLM output
+                print(f"  [extract] Retrying chunk {chunk.chunk_id}...")
+                retry_result = _call_llm(prompt, user_content, model, max_tokens=8192)
+                retry_data = retry_result["data"]
+                retry_segs = retry_data.get("segments", [])
+                total_tokens["input"] += retry_result["tokens"]["input"]
+                total_tokens["output"] += retry_result["tokens"]["output"]
+                if retry_segs:
+                    print(f"  [extract] Retry succeeded: {len(retry_segs)} segments")
+                    new_segments = retry_segs
+                    data = retry_data
+                    result = retry_result
+                else:
+                    # Last resort: try salvage on retry output too
+                    retry_salvaged = _salvage_segments(retry_result["raw"] or "")
+                    if retry_salvaged:
+                        print(f"  [extract] Salvaged {len(retry_salvaged)} segments from retry")
+                        new_segments = retry_salvaged
+                    else:
+                        print(f"  [extract] Retry also failed — chunk {chunk.chunk_id} "
+                              f"content may be too math-heavy for structured extraction")
+
         for seg in new_segments:
             if not seg.get("id") or seg["id"] in {s["id"] for s in all_segments}:
                 seg["id"] = f"s{next_segment_id}"
@@ -193,13 +330,17 @@ def phase1_extract_narrative(
         total_tokens["input"] += result["tokens"]["input"]
         total_tokens["output"] += result["tokens"]["output"]
 
-        per_chunk_results.append({
+        chunk_result = {
             "chunk_id": chunk.chunk_id,
             "new_segments": len(new_segments),
             "new_relations": len(chunk_relations),
             "dropped": len(chunk_dropped),
             "tokens": result["tokens"],
-        })
+        }
+        # Save raw output for chunks that produced 0 segments (diagnostic)
+        if not new_segments and result["tokens"]["output"] > 100:
+            chunk_result["_raw_output_preview"] = (result["raw"] or "")[:2000]
+        per_chunk_results.append(chunk_result)
 
     concept_index = _build_concept_index(all_segments)
 
@@ -428,6 +569,15 @@ def extract_narrative(
     skip_tree: bool = False,
 ) -> dict:
     """Run the full Narrative Structure extraction pipeline."""
+
+    # Pre-process: clean PDF artifacts that cause JSON generation failures
+    original_len = len(document_text)
+    document_text = _preprocess_pdf_text(document_text)
+    cleaned_len = len(document_text)
+    if original_len != cleaned_len:
+        removed = original_len - cleaned_len
+        print(f"  [preprocess] Cleaned {removed} chars of PDF artifacts "
+              f"({original_len} → {cleaned_len})")
 
     # Phase 0: Skim
     p0 = phase0_skim(document_text, model=model)

@@ -4,6 +4,155 @@ Append-only development log. Add new entries at the top.
 
 ---
 
+## 2026-02-24
+
+### Completed
+
+- **Marker PDF Parser Integration**
+  - `src/parsing/marker_parser.py`: MarkerParser class with lazy model loading, `force_ocr` and `use_llm` options
+  - `src/parsing/pdf_parser.py`: Added `create_parser(backend)` factory — auto-detects marker availability, falls back to PyMuPDF
+  - `experiments/eval/run_eval.py`: Added `--parser auto|pymupdf|marker` CLI flag
+  - `Meta/Research/PDF_Parsing_Upgrade.md`: Research doc with comparison, config guide, and validation plan
+  - 动机：Adam 论文 53 个 U+FFFD 字符 + 数学符号导致 JSON 损坏，根因是 PyMuPDF 无法处理复杂 math glyphs
+  - Marker 基于 Surya OCR，学术论文支持：math→LaTeX, dual-column layout, table structure
+
+### Decisions Made
+- **Marker 作为可选 PDF parser** — 通过 factory pattern 支持 auto/pymupdf/marker 三种 backend
+- **Lazy model loading** — Marker 模型 ~3GB，首次调用时加载，singleton 复用
+- **force_ocr=True 为默认** — 必须开启才能处理 inline math
+
+### Next
+- [ ] 安装 marker-pdf，用 Adam 论文验证 math 质量改善
+- [ ] Phase 1 全量重跑对比 PyMuPDF vs Marker
+- [ ] 检查 LaTeX 格式对 extraction prompt 的影响
+
+---
+
+## 2026-02-23
+
+### Completed
+
+- **Phase 1 Evaluation: 10 CS Papers 跑通**
+  - 创建完整评估框架：`experiments/eval/test_corpus.py`（10 CS + 5 跨学科 + 3 多文档组）
+  - 创建 7 维评分体系：`experiments/eval/scoring_rubric.py`（narrative_coverage, segment_quality, relation_accuracy, tree_structure, concept_extraction, dedup_quality, anchor_binding）
+  - 创建批量运行器：`experiments/eval/run_eval.py`（下载、单篇运行、分阶段运行）
+  - 10 篇 CS 论文全部成功提取 + tree 构建
+
+- **Tree Structuring 修复（3 个 bug）**
+  - Bug 1: `max_tokens=4096` 硬编码 → 长文档（>60 segs）的 tree JSON 输出被截断，`_parse_json` 返回空 dict
+    - 修复：动态计算 `max_tokens = max(4096, segments * 50 + 500)`，上限 16384
+    - 加入 retry：首次返回空时自动用 16384 重试
+    - 加入 `finish_reason=length` 检测和 warning 输出
+  - Bug 2: LLM 返回循环 branches（如 s3→s5, s5→s3）导致 `build_node()` 无限递归（RecursionError）
+    - 修复：构建 `children_of` 后做 cycle detection，主动断开循环边
+    - 加入 `_building` set 作为 recursion guard（最终安全网）
+    - 过滤 spine nodes 不能作为 branch children
+  - Bug 3: self-loop（parent_id == child_id）未处理 → 直接跳过
+
+- **Chunk Size 问题诊断与修复（3 轮迭代）**
+
+  **迭代 1：发现 segment 过多**
+  - 问题：dropout 107 segs、raft 118 segs、resnet 89 segs — 每段仅 ~220 chars（1-2 句话）
+  - 根因：`DEFAULT_CHUNK_TOKENS = 2048`（~8000 chars），长论文切出 10+ chunks，每个 chunk 产出 10+ segments
+  - 措施：将 `DEFAULT_CHUNK_TOKENS` 从 2048 提高到 6000
+  - 结果：attention 69→29 segs，resnet 89→38 segs ✓，但 dropout 107→82、bert 61→65 仍偏多
+
+  **迭代 2：发现 per-chunk 产出不均**
+  - 问题：chunk 1 统一产出 29-35 个 segments，后续 chunks 仅 11-20 个
+  - 根因：第一个 chunk 没有 "existing segments" 做去重参照，LLM 缺少粒度锚定
+  - 措施：修改 extraction prompt — "aim for 5-8 segments per section, each covering a complete argumentative unit. If producing more than 10, merge related details."
+  - 结果：改善但问题转移到 chunk 数量线性增长
+
+  **迭代 3：Adaptive Chunking（对数缩放）**
+  - 问题：chunk 数量随文档长度线性增长 → segment 数量线性增长。但叙事复杂度不是线性的。
+  - 用户洞察："20K token 的文章只应该比 10K token 的文章多 30% segment，不是两倍"
+  - 措施：重写 `programmatic_chunker.py` — chunk count = log2(doc_tokens / 5000) + 1
+    - 考虑 overlap 补偿和段落断点的额外空间
+    - 实际效果：5K→1 chunk, 10K→2, 15K→3, 20K→3, 50K→4
+  - 最终结果（Phase 1 全部 10 篇）：
+
+  | Paper | Tokens | Chunks | Segs | Spine/Branch | Acts |
+  |-------|--------|--------|------|-------------|------|
+  | attention | 10K | 2 | 31 | 17/14 | 5 |
+  | resnet | 15K | 3 | 42 | 20/22 | 5 |
+  | gan | 7K | 2 | 19 | 9/10 | 4 |
+  | bert | 16K | 3 | 47 | 24/23 | 4 |
+  | dropout | 20K | 3 | 44 | 20/24 | 7 |
+  | mapreduce | 14K | 2 | 31 | 16/15 | 5 |
+  | bitcoin | 5K | 1 | 21 | 16/5 | 4 |
+  | raft | 23K | 3 | 64 | 32/32 | 7 |
+  | batchnorm | 11K | 2 | 36 | 26/10 | 5 |
+  | adam | 10K | 2 | 9 | 8/1 | 4 |
+
+- **Tree 质量人工审查（10 篇）**
+  - 优秀（7/10）：attention, gan, bitcoin, mapreduce, resnet, dropout, raft
+    - 叙事弧完整（problem → mechanism → validation → conclusion）
+    - Spine/branch 分配合理（branch = 例子、细节、对比）
+    - Act 命名准确反映主题转换
+  - 有问题（3/10）：
+    - bert: 47 segs 偏多，SQuAD 细节过度切分
+    - batchnorm: spine 26 vs branch 10，太多放 spine
+    - adam: 只有 9 segs，算法核心机制描述缺失
+
+- **Anchor 问题确认**
+  - Anchor 是 segment 到原文的绑定机制（LLM 引用 8-15 字原文短语 → 字符串匹配定位）
+  - 部分论文 anchor fail 率很高：bert 36/47、dropout 31/44、batchnorm 21/36
+  - 根因：LLM 无法精确引用原文（轻微改写、省略词汇），字符串匹配容错不够
+  - 计划重构：embedding-based semantic search + LLM 精选，替代字符串匹配
+
+- **可视化 Demo（3 个版本迭代）**
+  - `graph_demo.html`：D3 力导向图 — 用户反馈 "人类真的能使用吗？"
+  - `tree_demo.html`：可折叠大纲 — 用户反馈 "我想要思维导图，不是大纲"
+  - `mindmap_demo.html`：D3 水平树形思维导图 — 用户确认 "这种就很好了"
+
+- **多文档提取框架**
+  - `src/extraction/multi_doc_extractor.py`：跨文档关系提取（builds_on, contradicts, shares_mechanism）
+  - Phase 3 初步跑通 transformer-evolution 和 distributed-systems 两组
+
+- **Phase 2 问题发现**
+  - econ-nash, sociology-granovetter, bio-crispr 三篇下载到的是登录/验证页面，不是论文 PDF（JSTOR/Science 付费墙）
+  - blog-scaling 正常但 tree 失败（已修复）
+  - 需要手动提供 PDF
+
+### Decisions Made
+- **从 entity-edge KG 转向 narrative-first 提取** — v8 pivot：segments（叙事单元）替代 entities，discourse relations 替代 typed edges
+- **Adaptive chunking 替代 fixed chunking** — chunk count 对数缩放，避免长文档 segment 爆炸
+- **Graph 保留为 ground truth，Tree 为 reading view** — graph 有全部 relations，tree 提供线性阅读路径
+- **Tree structuring 用 LLM 而非算法** — 纯算法版本失败（全部 29 segments 上了 spine），因为 relation types 不够区分 spine vs branch
+- **Anchor 需要 embedding-based 重构** — 字符串匹配对 LLM 引用的容错太低
+
+- **Deep Dive: Adam 论文只产出 9 segments 的根因分析**
+  - 现象：2 chunks，chunk 1 用了 7760 input + 4587 output tokens，但产出 **0 segments**。所有 9 segments 全来自 chunk 2
+  - Chunk 1 内容：Abstract → Introduction → Algorithm 1 伪代码 → Bias Correction 推导 → Convergence Proof (Theorem 4.1) → Related Work → 实验开头 — **核心算法机制全在这里**
+  - Chunk 2 内容：实验结果对比 + AdaMax 变体 + 结论 — 只有实验和延伸
+  - **根因：PDF 解析 + 数学符号导致 JSON 生成失败**
+    - 53 个 U+FFFD 替换字符（PDF 无法解析 hat notation：m̂ₜ → m�）
+    - 22% 的行是数学公式（226 个 Unicode 特殊字符：β×62, θ×54, α×31, ∇, √, ∥ 等）
+    - LLM 产出了 4587 tokens 的输出，但内容中嵌入的数学符号导致 JSON 格式损坏，`_parse_json` 返回空 dict
+  - **修复（已实施）**：
+    - Fix 1: `_preprocess_pdf_text()` — 在 chunking 前清理 U+FFFD、规范化 ligatures（ﬁ→fi）、清除控制字符
+    - Fix 2: `_salvage_segments()` — 从 malformed JSON 中尝试提取 segments array，支持截断恢复
+    - Fix 3: 0-segment chunk 自动重试一次，重试也失败则尝试 salvage retry 输出
+    - Fix 4: 诊断日志 — 0-segment 时打印 raw output preview + 保存到 per_chunk results
+
+- **Deep Dive: BERT 论文 47 segments 的根因**
+  - 3 chunks，chunk 3 完全在 References 区域（References 从 char 37756 即 58% 处开始，chunk 3 从 char 45400 开始）
+  - Chunk 3 仍产出了 13 segments — "skip non-teaching content" prompt 指导对 references 无效
+  - 修复留待后续：考虑 chunking 前剥离 references，或加强 prompt
+
+### Blockers / Issues
+- Anchor fail 率在长论文上 50-70%，需要 embedding 方案重构
+- BERT chunk 3 在 References 区域仍产出 segments — 需要 references 检测/剥离
+- Phase 2 三篇论文需要手动 PDF
+
+### Next
+- [ ] 实现 embedding-based anchor resolution（句子 embedding → top-K 检索 → LLM 精选）
+- [ ] 重跑 Phase 1 验证 PDF 预处理 + salvage 对 adam 的改善
+- [ ] 加入 references 区域检测，chunking 前剥离
+- [ ] 手动提供 Phase 2 PDF，跑 cross-discipline 评估
+
+---
+
 ## 2026-02-21
 
 ### Completed

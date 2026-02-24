@@ -1,12 +1,16 @@
 """Programmatic document chunking — no LLM needed.
 
-Simple fixed-size chunking with overlap. No header detection, no heuristics.
+Adaptive chunking: target chunk count scales logarithmically with document
+length, so narrative complexity grows sublinearly. A 20K-token paper gets
+~30% more chunks than a 10K-token paper, not 2x.
+
 The narrative from Phase 0 provides semantic context; chunking just needs to
 deliver consistently-sized pieces of text.
 """
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 
@@ -24,30 +28,71 @@ class Chunk:
 
 # ── Configuration ──────────────────────────────────────────────────────────
 
-DEFAULT_CHUNK_TOKENS = 2048
 DEFAULT_OVERLAP_RATIO = 0.10  # 10% overlap
 CHARS_PER_TOKEN = 4
+
+# Adaptive chunking: target chunk count = log2(doc_tokens / BASE) + 1
+# Examples (approximate, before paragraph-boundary adjustment):
+#   5K tokens → 1 chunk    (~5K tok/chunk)
+#   8K tokens → 2 chunks   (~4K tok/chunk)
+#  15K tokens → 3 chunks   (~5K tok/chunk)
+#  20K tokens → 3 chunks   (~6.7K tok/chunk)
+#  30K tokens → 4 chunks   (~7.5K tok/chunk)
+#  50K tokens → 4 chunks   (~12.5K tok/chunk)
+ADAPTIVE_BASE_TOKENS = 5000
+MAX_CHUNKS = 5
+
+
+def _compute_adaptive_chunk_tokens(
+    doc_tokens: int,
+    overlap_ratio: float = DEFAULT_OVERLAP_RATIO,
+) -> int:
+    """Compute chunk size so that chunk count scales logarithmically.
+
+    Accounts for overlap: with N chunks and overlap ratio r, the actual
+    text consumed is N * chunk * (1-r) + chunk * r = chunk * (N - Nr + r).
+    So chunk = doc_tokens / (N*(1-r) + r) to hit exactly N chunks.
+    """
+    if doc_tokens <= ADAPTIVE_BASE_TOKENS:
+        return doc_tokens  # single chunk
+
+    target_chunks = min(
+        MAX_CHUNKS,
+        max(1, round(math.log2(doc_tokens / ADAPTIVE_BASE_TOKENS)) + 1),
+    )
+    # Compensate for overlap so actual chunk count matches target
+    effective_divisor = target_chunks * (1 - overlap_ratio) + overlap_ratio
+    # Add 10% headroom for paragraph-boundary adjustments
+    return int(doc_tokens / effective_divisor * 1.10)
 
 
 def chunk_by_sections(
     document_text: str,
     *,
-    chunk_tokens: int = DEFAULT_CHUNK_TOKENS,
+    chunk_tokens: int | None = None,
     overlap_ratio: float = DEFAULT_OVERLAP_RATIO,
 ) -> list[Chunk]:
-    """Split document into fixed-size chunks with overlap.
+    """Split document into adaptively-sized chunks with overlap.
+
+    Chunk count scales logarithmically with document length — longer
+    documents get bigger chunks, not proportionally more chunks.
 
     Splits at paragraph boundaries (double newlines) when possible,
     falling back to single newlines, then hard split.
 
     Args:
         document_text: Full document text.
-        chunk_tokens: Target tokens per chunk.
+        chunk_tokens: Override target tokens per chunk. If None, computed
+                      adaptively from document length.
         overlap_ratio: Fraction of chunk to overlap with next (0.10 = 10%).
 
     Returns:
         List of Chunks with positions into the original text.
     """
+    doc_tokens = len(document_text) // CHARS_PER_TOKEN
+    if chunk_tokens is None:
+        chunk_tokens = _compute_adaptive_chunk_tokens(doc_tokens)
+
     chunk_chars = chunk_tokens * CHARS_PER_TOKEN
     overlap_chars = int(chunk_chars * overlap_ratio)
     doc_len = len(document_text)

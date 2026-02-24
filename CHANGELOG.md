@@ -8,6 +8,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Marker PDF Parser Integration** (2026-02-24)
+  - `src/parsing/marker_parser.py`: MarkerParser class with lazy model loading, `force_ocr` and `use_llm` options
+  - `src/parsing/pdf_parser.py`: Added `create_parser(backend)` factory — auto-detects marker availability, falls back to PyMuPDF
+  - `experiments/eval/run_eval.py`: Added `--parser auto|pymupdf|marker` CLI flag
+  - `Meta/Research/PDF_Parsing_Upgrade.md`: Research doc with comparison, config guide, and validation plan
+- **PDF Text Pre-processing** (2026-02-23)
+  - `_preprocess_pdf_text()`: Cleans U+FFFD replacement chars, normalizes ligatures (ﬁ→fi), strips control chars
+  - Applied at pipeline entry before chunking — fixes math-heavy papers (e.g., Adam) where PDF artifacts caused JSON failures
+- **Chunk Extraction Salvage & Retry** (2026-02-23)
+  - `_salvage_segments()`: Recovers segments from malformed/truncated JSON output (bracket matching + regex fallback)
+  - Auto-retry: chunks producing 0 segments get one retry, with salvage attempted on both attempts
+  - Diagnostic logging: raw output preview + saved to per_chunk results for post-hoc analysis
+- **Phase 1 Evaluation Suite** (2026-02-23)
+  - `experiments/eval/test_corpus.py`: 10 CS papers + 5 cross-discipline + 3 multi-doc groups
+  - `experiments/eval/scoring_rubric.py`: 7-dimension weighted scoring (narrative_coverage, segment_quality, etc.)
+  - `experiments/eval/run_eval.py`: Batch runner with download, per-doc, per-phase execution
+  - `src/extraction/multi_doc_extractor.py`: Cross-document relation extraction (builds_on, contradicts, shares_mechanism)
+- **Visualization Demos** (2026-02-22)
+  - `experiments/results/v9-narrative/graph_demo.html`: D3 force-directed graph (rejected by user)
+  - `experiments/results/v9-narrative/tree_demo.html`: Collapsible outline tree (rejected by user)
+  - `experiments/results/v9-narrative/mindmap_demo.html`: D3 horizontal mind-map tree (approved)
+
+### Changed
+- **Adaptive Chunking** (2026-02-23): Fixed-size chunks → logarithmic scaling
+  - `programmatic_chunker.py`: chunk count = log2(doc_tokens / 5000) + 1, with overlap compensation
+  - 5K→1 chunk, 10K→2, 15K→3, 20K→3, 50K→4 (sublinear growth)
+  - Extraction prompt: "aim for 5-8 segments per section" guidance added
+- **Tree Structuring Robustness** (2026-02-23)
+  - Dynamic `max_tokens` scaling (segments × 50 + 500, up to 16384) with retry on truncation
+  - Cycle detection and breaking in branch parent-child relationships
+  - `_building` recursion guard in `build_node()` as safety net
+
+### Fixed
+- **Tree structuring silent failure on large documents** (2026-02-23): `max_tokens=4096` caused JSON truncation for docs with 60+ segments. Now scales dynamically.
+- **RecursionError in `_assemble_tree`** (2026-02-23): LLM-generated circular parent-child branches (e.g., s3→s5→s3) caused infinite recursion. Now detected and broken.
+- **Over-segmentation** (2026-02-23): 2048-token chunks produced 100+ segments for 15-page papers. Adaptive chunking + prompt guidance reduced to 20-65 range.
+
 - **Graph-to-Tree Structuring** (2026-02-21)
   - `src/transform/graph_to_tree.py`: LLM-based narrative graph → reading tree conversion (spine/branch/act/see-also)
   - `NARRATIVE_TREE_PROMPT`: Prompt for spine identification, act grouping, and parent assignment

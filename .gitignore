@@ -36,6 +36,12 @@ Thumbs.db
 experiments/results/
 !experiments/results/.gitkeep
 
+# Downloaded papers (not ours to redistribute)
+experiments/eval/papers/
+
+# Eval results (reproduced from runner)
+experiments/eval/results/
+
 # Environment
 .env
 .env.local

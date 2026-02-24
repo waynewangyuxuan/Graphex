@@ -124,3 +124,37 @@ class PDFParser:
             page_count=1,
             metadata={},
         )
+
+
+# ── Factory ──────────────────────────────────────────────────────────────
+
+def create_parser(backend: str = "auto", **kwargs):
+    """
+    Create a PDF parser with the specified backend.
+
+    Args:
+        backend: "pymupdf" (fast, basic), "marker" (high-quality, slower),
+                 or "auto" (marker if available, else pymupdf)
+        **kwargs: Passed to the parser constructor.
+                  For marker: force_ocr=True, use_llm=False
+
+    Returns:
+        Parser instance with .parse(path) and .parse_text(text) methods
+    """
+    if backend == "auto":
+        try:
+            from src.parsing.marker_parser import is_marker_available
+            if is_marker_available():
+                backend = "marker"
+            else:
+                backend = "pymupdf"
+        except ImportError:
+            backend = "pymupdf"
+
+    if backend == "marker":
+        from src.parsing.marker_parser import MarkerParser
+        return MarkerParser(**kwargs)
+    elif backend == "pymupdf":
+        return PDFParser()
+    else:
+        raise ValueError(f"Unknown parser backend: {backend!r}. Use 'pymupdf' or 'marker'.")

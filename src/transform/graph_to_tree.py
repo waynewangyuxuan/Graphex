@@ -70,6 +70,13 @@ def _call_llm(system: str, user: str, model: str, max_tokens: int = 4096) -> dic
     )
     raw = response.choices[0].message.content
     data = _parse_json(raw)
+
+    # Detect truncated output — LLM hit max_tokens before finishing JSON
+    finish = response.choices[0].finish_reason
+    if finish == "length" and not data.get("acts"):
+        print(f"  [tree] WARNING: output truncated (max_tokens={max_tokens}), "
+              f"got {len(raw)} chars, finish_reason=length")
+
     tokens = {
         "input": response.usage.prompt_tokens,
         "output": response.usage.completion_tokens,
@@ -135,9 +142,20 @@ def graph_to_tree(
     prompt = prompt.replace("{all_segments}", all_segments_str)
     prompt = prompt.replace("{all_relations}", all_relations_str)
 
-    # ── Call LLM ──
-    result = _call_llm(prompt, "Please structure this into a reading tree.", model)
+    # ── Call LLM (scale max_tokens by segment count) ──
+    # Each segment needs ~40 tokens in the output (spine_id or branch entry)
+    # plus acts overhead. Minimum 4096, scale up for large docs.
+    estimated_output = len(segments) * 50 + 500
+    max_tokens = max(4096, min(estimated_output, 16384))
+
+    result = _call_llm(prompt, "Please structure this into a reading tree.", model, max_tokens=max_tokens)
     decision = result["data"]
+
+    # If LLM returned empty/truncated, retry once with higher max_tokens
+    if not decision.get("acts") and max_tokens < 16384:
+        print(f"  [tree] Empty decision, retrying with max_tokens=16384...")
+        result = _call_llm(prompt, "Please structure this into a reading tree.", model, max_tokens=16384)
+        decision = result["data"]
 
     # ── Assemble tree from LLM decision ──
     tree = _assemble_tree(segments, decision, schema)
@@ -164,16 +182,51 @@ def _assemble_tree(
     branches = decision.get("branches", [])
     see_also = decision.get("see_also", [])
 
-    # Build parent→children mapping
+    # Collect all spine IDs so we can reject branches that target spine nodes
+    spine_ids = set()
+    for act in acts:
+        for sid in act.get("spine_ids", []):
+            spine_ids.add(sid)
+
+    # Build parent→children mapping, filtering out cycles and invalid refs
     children_of: dict[str, list[dict]] = {}  # parent_id → list of {child_id, rel}
     for b in branches:
         pid = b.get("parent_id", "")
         cid = b.get("child_id", "")
         rel = b.get("rel", "")
-        if pid and cid and pid in seg_map and cid in seg_map:
-            if pid not in children_of:
-                children_of[pid] = []
-            children_of[pid].append({"child_id": cid, "rel": rel})
+        if not pid or not cid or pid not in seg_map or cid not in seg_map:
+            continue
+        if pid == cid:
+            continue  # self-loop
+        if cid in spine_ids:
+            continue  # spine nodes should not be children
+        if pid not in children_of:
+            children_of[pid] = []
+        children_of[pid].append({"child_id": cid, "rel": rel})
+
+    # Detect and break cycles in children_of graph
+    def _has_cycle(start: str, visited: set[str]) -> bool:
+        if start in visited:
+            return True
+        visited.add(start)
+        for kid in children_of.get(start, []):
+            if _has_cycle(kid["child_id"], visited):
+                return True
+        visited.discard(start)
+        return False
+
+    # Remove edges that create cycles
+    for pid in list(children_of.keys()):
+        safe_kids = []
+        for kid in children_of[pid]:
+            # Temporarily add and test
+            test_visited: set[str] = set()
+            children_of[pid] = safe_kids + [kid]
+            if _has_cycle(pid, test_visited):
+                print(f"  [tree] Broke cycle: {pid} → {kid['child_id']}")
+            else:
+                safe_kids.append(kid)
+        children_of[pid] = safe_kids
 
     # Build see_also lookup
     see_also_of: dict[str, list[dict]] = {}
@@ -186,13 +239,18 @@ def _assemble_tree(
 
     # Track which segments are accounted for
     placed = set()
+    # Guard against any remaining cycles during recursion
+    _building = set()
 
     def build_node(seg_id: str, rel: str = "") -> Optional[dict]:
         """Recursively build a tree node."""
         seg = seg_map.get(seg_id)
         if not seg:
             return None
+        if seg_id in _building:
+            return None  # cycle — bail out
         placed.add(seg_id)
+        _building.add(seg_id)
 
         node = {
             "id": seg_id,
@@ -224,6 +282,7 @@ def _assemble_tree(
                 if child_node:
                     node["children"].append(child_node)
 
+        _building.discard(seg_id)
         return node
 
     # Build acts
