@@ -32,10 +32,10 @@ def _preprocess_pdf_text(text: str) -> str:
     Targets:
     - U+FFFD replacement characters (failed PDF glyph conversions)
     - Ligature normalization (ﬁ→fi, ﬂ→fl, ﬀ→ff, etc.)
+    - Unicode math symbols → ASCII readable (β→beta, θ→theta, etc.)
     - Excessive whitespace from column layouts
     """
     # 1. Remove U+FFFD replacement characters (PDF parsing artifacts)
-    #    These are unrecoverable — better to remove than confuse LLM
     text = text.replace("\ufffd", "")
 
     # 2. Normalize common ligatures from PDF rendering
@@ -49,11 +49,111 @@ def _preprocess_pdf_text(text: str) -> str:
     for lig, replacement in ligatures.items():
         text = text.replace(lig, replacement)
 
-    # 3. Collapse runs of 3+ spaces (PDF column artifacts) to single space
+    # 3. Normalize Unicode math symbols to ASCII-safe forms.
+    #    This prevents LLM from embedding raw Unicode in JSON strings,
+    #    which often causes JSON generation to break on math-heavy papers.
+    text = _normalize_math_symbols(text)
+
+    # 4. Collapse runs of 3+ spaces (PDF column artifacts) to single space
     text = re.sub(r" {3,}", " ", text)
 
-    # 4. Remove null bytes and other control characters (except \n, \t, \r)
+    # 5. Remove null bytes and other control characters (except \n, \t, \r)
     text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)
+
+    return text
+
+
+# Greek letters and math symbols → ASCII readable names
+_MATH_SYMBOL_MAP = {
+    # Greek lowercase
+    "α": "alpha", "β": "beta", "γ": "gamma", "δ": "delta",
+    "ε": "epsilon", "ϵ": "epsilon", "ζ": "zeta", "η": "eta",
+    "θ": "theta", "ϑ": "theta", "ι": "iota", "κ": "kappa",
+    "λ": "lambda", "μ": "mu", "ν": "nu", "ξ": "xi",
+    "π": "pi", "ρ": "rho", "σ": "sigma", "τ": "tau",
+    "υ": "upsilon", "φ": "phi", "ϕ": "phi", "χ": "chi",
+    "ψ": "psi", "ω": "omega",
+    # Greek uppercase
+    "Γ": "Gamma", "Δ": "Delta", "Θ": "Theta", "Λ": "Lambda",
+    "Ξ": "Xi", "Π": "Pi", "Σ": "Sigma", "Φ": "Phi",
+    "Ψ": "Psi", "Ω": "Omega",
+    # Math operators
+    "∇": "nabla", "∂": "partial",
+    "∞": "inf", "≈": "~=", "≠": "!=",
+    "≤": "<=", "≥": ">=", "≪": "<<", "≫": ">>",
+    "±": "+/-", "∓": "-/+",
+    "×": "x", "÷": "/",
+    "·": "*", "∘": "o",
+    "√": "sqrt",
+    "∈": "in", "∉": "not in",
+    "⊂": "subset", "⊃": "superset", "⊆": "subseteq", "⊇": "supseteq",
+    "∪": "union", "∩": "intersect",
+    "∧": "and", "∨": "or", "¬": "not",
+    "∀": "forall", "∃": "exists",
+    "∑": "sum", "∏": "prod", "∫": "integral",
+    # Arrows
+    "→": "->", "←": "<-", "↔": "<->",
+    "⇒": "=>", "⇐": "<=", "⇔": "<=>",
+    # Special
+    "∥": "||", "⊥": "perp",
+    "∝": "propto", "∅": "empty",
+    "⊗": "otimes", "⊕": "oplus",
+    "†": "dagger", "‡": "double-dagger",
+    # Common math typography from PDF
+    "−": "-",  # U+2212 minus sign → ASCII hyphen
+    "′": "'",  # prime
+    "″": "\"",  # double prime
+    "ℝ": "R", "ℤ": "Z", "ℕ": "N", "ℂ": "C",
+}
+
+
+def _normalize_math_symbols(text: str) -> str:
+    """Replace Unicode math symbols with ASCII-readable equivalents.
+
+    This is critical for math-heavy papers (e.g., Adam, BatchNorm) where
+    PyMuPDF extracts Unicode Greek letters and operators that cause LLM
+    JSON generation to fail. By converting to ASCII, the LLM can safely
+    embed these in JSON string values without encoding issues.
+    """
+    for symbol, replacement in _MATH_SYMBOL_MAP.items():
+        text = text.replace(symbol, replacement)
+
+    # Subscript digits: ₀₁₂₃₄₅₆₇₈₉ → _0 _1 ... _9
+    subscript_digits = "₀₁₂₃₄₅₆₇₈₉"
+    for i, sub in enumerate(subscript_digits):
+        text = text.replace(sub, f"_{i}")
+
+    # Superscript digits: ⁰¹²³⁴⁵⁶⁷⁸⁹ → ^0 ^1 ... ^9
+    superscript_digits = "⁰¹²³⁴⁵⁶⁷⁸⁹"
+    for i, sup in enumerate(superscript_digits):
+        text = text.replace(sup, f"^{i}")
+
+    # Subscript letters: ₐ ₑ ₒ ₓ ₔ ₕ ₖ ₗ ₘ ₙ ₚ ₛ ₜ ᵢ ⱼ
+    subscript_letters = {
+        "ₐ": "_a", "ₑ": "_e", "ₒ": "_o", "ₓ": "_x",
+        "ₕ": "_h", "ₖ": "_k", "ₗ": "_l", "ₘ": "_m",
+        "ₙ": "_n", "ₚ": "_p", "ₛ": "_s", "ₜ": "_t",
+        "ᵢ": "_i", "ⱼ": "_j",
+        "₌": "=", "₍": "(", "₎": ")",
+    }
+    for sub, repl in subscript_letters.items():
+        text = text.replace(sub, repl)
+
+    # Superscript letters: ⁿ ⁱ ᵗ ˢ
+    superscript_letters = {
+        "ⁿ": "^n", "ⁱ": "^i", "ᵗ": "^t", "ˢ": "^s",
+        "⁺": "+", "⁻": "-", "⁼": "=",
+        "⁽": "(", "⁾": ")",
+    }
+    for sup, repl in superscript_letters.items():
+        text = text.replace(sup, repl)
+
+    # Hat/tilde combining characters (often cause U+FFFD in PDF)
+    text = text.replace("\u0302", "^")   # combining circumflex (hat)
+    text = text.replace("\u0303", "~")   # combining tilde
+    text = text.replace("\u0304", "-")   # combining macron (bar)
+    text = text.replace("\u0307", ".")   # combining dot above
+    text = text.replace("\u0308", "..")  # combining diaeresis
 
     return text
 
@@ -302,12 +402,21 @@ def phase1_extract_narrative(
             seg["_source_chunk"] = chunk.chunk_id
             all_segments.append(seg)
 
+        # Collect relations from both top-level AND nested inside segments.
+        # Some LLMs embed relations inside each segment object instead of
+        # (or in addition to) a top-level "relations" array.
+        raw_relations = list(data.get("relations", []))
+        for seg in new_segments:
+            nested = seg.pop("relations", None)
+            if isinstance(nested, list):
+                raw_relations.extend(nested)
+
         # Validate relations
         segment_ids = {s["id"] for s in all_segments}
         chunk_relations = []
         chunk_dropped = []
 
-        for rel in data.get("relations", []):
+        for rel in raw_relations:
             issues = []
             if not rel.get("type"):
                 issues.append("missing_type")

@@ -142,14 +142,9 @@ def create_parser(backend: str = "auto", **kwargs):
         Parser instance with .parse(path) and .parse_text(text) methods
     """
     if backend == "auto":
-        try:
-            from src.parsing.marker_parser import is_marker_available
-            if is_marker_available():
-                backend = "marker"
-            else:
-                backend = "pymupdf"
-        except ImportError:
-            backend = "pymupdf"
+        # Default to pymupdf — it's fast and _preprocess_pdf_text handles artifacts.
+        # Use --parser marker explicitly when GPU is available.
+        backend = "pymupdf"
 
     if backend == "marker":
         from src.parsing.marker_parser import MarkerParser

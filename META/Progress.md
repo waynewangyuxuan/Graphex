@@ -8,15 +8,34 @@ Append-only development log. Add new entries at the top.
 
 ### Completed
 
-- **Adam Deep Dive 根因分析 + 三层修复**
+- **Adam Deep Dive 根因分析 + 三层修复 + 数学符号归一化**
   - 根因：PDF 解析产出 53 个 U+FFFD 替换字符（hat notation m̂ₜ → m�），22% 行是数学公式
   - chunk 1 用了 4587 output tokens 但 JSON 解析全部失败 → 核心算法内容完全丢失
   - **Fix 1**: `_preprocess_pdf_text()` — pipeline 入口清理 U+FFFD、ligatures、控制字符
   - **Fix 2**: `_salvage_segments()` — 从 malformed JSON 中恢复 segments（bracket matching + regex）
   - **Fix 3**: 0-segment chunk 自动重试 + salvage retry output
-  - **验证结果**：Adam 从 9 segments → **24 segments**，anchor 从几乎全失败 → 11 exact + 9 fuzzy + 4 failed
-    - `[preprocess] Cleaned 235 chars of PDF artifacts (41997 → 41762)`
-    - Tree: 19 spine / 5 branch / 6 acts（之前 8/1/4）
+  - **Fix 4**: `_normalize_math_symbols()` — ~80 个 Unicode 数学符号→ASCII 映射
+    - Greek letters: α→alpha, β→beta, θ→theta, ∇→nabla 等
+    - Operators: ≤→<=, ≥→>=, ∈→in, ∀→forall, ∑→sum, ∫→integral 等
+    - Sub/superscripts: ₀→_0, ²→^2, ₜ→_t 等
+    - Combining characters: \u0302→^, \u0303→~ 等
+  - **最终验证结果**：Adam 从 9 segments → **24 segments**
+    - `[preprocess] Cleaned -1952 chars of PDF artifacts (41997 → 43949)` — 文本变长因为 β→beta 等替换
+    - chunk 1 首次尝试仍 0 segments（3144 tokens），但 **retry 机制成功恢复 15 segments**
+    - Tree: 13 spine / 11 branch / 5 acts（之前 8/1/4）
+    - Anchors: 14 exact + 9 fuzzy + 1 failed（大幅改善）
+
+- **Bitcoin 0 Relations 修复（Nested Relations Bug）**
+  - 根因：LLM 将 relations 嵌入每个 segment 对象内部（`seg.relations`），而 pipeline 只读 top-level `data.get("relations", [])`
+  - 修复：从 segment 对象中提取 nested relations 并合并到 raw_relations
+    ```python
+    raw_relations = list(data.get("relations", []))
+    for seg in new_segments:
+        nested = seg.pop("relations", None)
+        if isinstance(nested, list):
+            raw_relations.extend(nested)
+    ```
+  - 待验证：需重跑 Bitcoin 确认 relations > 0
 
 - **BERT Deep Dive**
   - chunk 3 完全在 References 区域（References 从 58% 处开始），仍产出 13 segments
@@ -48,7 +67,8 @@ Append-only development log. Add new entries at the top.
 - **Embedding-based anchor 用轻量方案** — 后续用 sentence-transformers + faiss，不用 LlamaIndex
 
 ### Next
-- [ ] Phase 1 全量重跑，验证 preprocess 对所有 10 篇论文的改善
+- [ ] **重跑 Bitcoin** 验证 nested relations fix
+- [ ] **Phase 1 全量重跑** 验证 math normalization + nested relations 对所有 10 篇论文的改善
 - [ ] 实现 embedding-based anchor resolution（sentence-transformers + faiss）
 - [ ] 加入 references 区域检测，chunking 前剥离（解决 BERT 问题）
 - [ ] 手动提供 Phase 2 PDF，跑 cross-discipline 评估

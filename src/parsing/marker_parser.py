@@ -147,7 +147,8 @@ class MarkerParser:
         if toc:
             # First h1-level entry is likely the title
             for entry in toc:
-                if entry.get("heading_level", 99) <= 1:
+                level = entry.get("heading_level")
+                if level is not None and level <= 1:
                     title = entry.get("title", title)
                     break
 

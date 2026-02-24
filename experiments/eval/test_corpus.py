@@ -129,20 +129,26 @@ PHASE1_CS_PAPERS = [
 
 PHASE2_CROSS_DISCIPLINE = [
     {
-        "id": "econ-nash",
-        "title": "Non-Cooperative Games (Nash, 1951)",
-        "url": "https://www.jstor.org/stable/1969529",
-        "alt_source": "Provide PDF manually — JSTOR requires access",
+        "id": "econ-lemons",
+        "title": "The Market for Lemons: Quality Uncertainty and the Market Mechanism (Akerlof, 1970)",
+        "url": "https://personal.utdallas.edu/~nina.baranchuk/Fin7310/papers/Akerlof1970.pdf",
+        "alt_urls": [
+            "https://www.sfu.ca/~wainwrig/Econ400/akerlof.pdf",
+        ],
         "type": "paper",
         "discipline": "economics",
-        "expected_complexity": "high",
-        "notes": "Mathematical economics. Tests: theorem-proof structure, "
-                 "definition→lemma→theorem narrative arc.",
+        "expected_complexity": "medium",
+        "notes": "Information asymmetry classic (Nobel Prize basis). Tests: "
+                 "informal argumentation, real-world analogy (used cars) as mechanism, "
+                 "multi-market application pattern.",
     },
     {
         "id": "sociology-granovetter",
         "title": "The Strength of Weak Ties (Granovetter, 1973)",
-        "url": "https://sociology.stanford.edu/sites/g/files/sbiybj9501/f/publications/the_strength_of_weak_ties_and_exch_am_j_soc_copy.pdf",
+        "url": "https://www.cs.cmu.edu/~jure/pub/papers/granovetter73ties.pdf",
+        "alt_urls": [
+            "https://snap.stanford.edu/class/cs224w-readings/granovetter73weakties.pdf",
+        ],
         "type": "paper",
         "discipline": "sociology",
         "expected_complexity": "medium",
@@ -150,25 +156,31 @@ PHASE2_CROSS_DISCIPLINE = [
                  "structure, empirical findings as branches.",
     },
     {
-        "id": "bio-crispr",
-        "title": "A Programmable Dual-RNA-Guided DNA Endonuclease (Doudna & Charpentier)",
-        "url": "https://www.science.org/doi/pdf/10.1126/science.1225829",
-        "alt_source": "Provide PDF manually — Science requires access",
+        "id": "bio-alphafold",
+        "title": "Highly Accurate Protein Structure Prediction with AlphaFold (Jumper et al., 2021)",
+        "url": "https://www.nature.com/articles/s41586-021-03819-2.pdf",
+        "alt_urls": [
+            "https://www.nature.com/articles/s41586-021-03819-2",
+        ],
         "type": "paper",
         "discipline": "biology",
         "expected_complexity": "high",
-        "notes": "Wet lab biology. Tests: experimental narrative (method→result→implication), "
-                 "figure-heavy content handling.",
+        "notes": "Biology+AI crossover (Nobel Prize). Tests: complex architecture "
+                 "narrative, experimental validation against CASP14, dense methodology.",
     },
     {
-        "id": "popular-thinking-fast",
-        "title": "Thinking, Fast and Slow — Chapter 1 excerpt",
-        "alt_source": "Provide text/PDF manually — copyrighted book",
-        "type": "book_chapter",
+        "id": "psych-prospect",
+        "title": "Prospect Theory: An Analysis of Decision under Risk (Kahneman & Tversky, 1979)",
+        "url": "https://web.mit.edu/curhan/www/docs/Articles/15341_Readings/Behavioral_Decision_Theory/Kahneman_Tversky_1979_Prospect_theory.pdf",
+        "alt_urls": [
+            "https://courses.washington.edu/pbafhall/514/514%20Readings/ProspectTheory.pdf",
+        ],
+        "type": "paper",
         "discipline": "psychology",
-        "expected_complexity": "low",
-        "notes": "Popular science writing. Tests: storytelling structure, "
-                 "anecdote→concept pattern, very different from academic style.",
+        "expected_complexity": "high",
+        "notes": "Behavioral economics foundation (Nobel Prize). Tests: "
+                 "empirical observation→formal theory arc, value function + "
+                 "weighting function as dual mechanisms, critique of expected utility.",
     },
     {
         "id": "blog-scaling",
