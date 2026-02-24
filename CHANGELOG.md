@@ -8,11 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Marker PDF Parser Integration** (2026-02-24)
+- **Marker PDF Parser Integration** (2026-02-24) — Optional upgrade path for GPU environments
   - `src/parsing/marker_parser.py`: MarkerParser class with lazy model loading, `force_ocr` and `use_llm` options
-  - `src/parsing/pdf_parser.py`: Added `create_parser(backend)` factory — auto-detects marker availability, falls back to PyMuPDF
+  - `src/parsing/pdf_parser.py`: Added `create_parser(backend)` factory — auto/pymupdf/marker
   - `experiments/eval/run_eval.py`: Added `--parser auto|pymupdf|marker` CLI flag
-  - `Meta/Research/PDF_Parsing_Upgrade.md`: Research doc with comparison, config guide, and validation plan
+  - Currently shelved: too slow on CPU without GPU; `_preprocess_pdf_text` solves core issue
+
+### Fixed
+- **Adam paper extraction failure** (2026-02-24) — Was: 9 segments (chunk 1 → 0 segs). Now: 24 segments
+  - Root cause: 235 chars of PDF artifacts (U+FFFD) caused LLM JSON output corruption
+  - `_preprocess_pdf_text()` removes artifacts at pipeline entry → chunk 1 now produces segments normally
 - **PDF Text Pre-processing** (2026-02-23)
   - `_preprocess_pdf_text()`: Cleans U+FFFD replacement chars, normalizes ligatures (ﬁ→fi), strips control chars
   - Applied at pipeline entry before chunking — fixes math-heavy papers (e.g., Adam) where PDF artifacts caused JSON failures

@@ -8,23 +8,50 @@ Append-only development log. Add new entries at the top.
 
 ### Completed
 
-- **Marker PDF Parser Integration**
-  - `src/parsing/marker_parser.py`: MarkerParser class with lazy model loading, `force_ocr` and `use_llm` options
-  - `src/parsing/pdf_parser.py`: Added `create_parser(backend)` factory — auto-detects marker availability, falls back to PyMuPDF
+- **Adam Deep Dive 根因分析 + 三层修复**
+  - 根因：PDF 解析产出 53 个 U+FFFD 替换字符（hat notation m̂ₜ → m�），22% 行是数学公式
+  - chunk 1 用了 4587 output tokens 但 JSON 解析全部失败 → 核心算法内容完全丢失
+  - **Fix 1**: `_preprocess_pdf_text()` — pipeline 入口清理 U+FFFD、ligatures、控制字符
+  - **Fix 2**: `_salvage_segments()` — 从 malformed JSON 中恢复 segments（bracket matching + regex）
+  - **Fix 3**: 0-segment chunk 自动重试 + salvage retry output
+  - **验证结果**：Adam 从 9 segments → **24 segments**，anchor 从几乎全失败 → 11 exact + 9 fuzzy + 4 failed
+    - `[preprocess] Cleaned 235 chars of PDF artifacts (41997 → 41762)`
+    - Tree: 19 spine / 5 branch / 6 acts（之前 8/1/4）
+
+- **BERT Deep Dive**
+  - chunk 3 完全在 References 区域（References 从 58% 处开始），仍产出 13 segments
+  - "skip non-teaching content" prompt 对 references 无效
+  - 修复搁置：后续考虑 chunking 前剥离 references
+
+- **Marker PDF Parser 集成（备选方案）**
+  - `src/parsing/marker_parser.py`: MarkerParser class with lazy model loading
+  - `src/parsing/pdf_parser.py`: Added `create_parser(backend)` factory
   - `experiments/eval/run_eval.py`: Added `--parser auto|pymupdf|marker` CLI flag
-  - `Meta/Research/PDF_Parsing_Upgrade.md`: Research doc with comparison, config guide, and validation plan
-  - 动机：Adam 论文 53 个 U+FFFD 字符 + 数学符号导致 JSON 损坏，根因是 PyMuPDF 无法处理复杂 math glyphs
-  - Marker 基于 Surya OCR，学术论文支持：math→LaTeX, dual-column layout, table structure
+  - `Meta/Research/PDF_Parsing_Upgrade.md`: 完整调研文档
+  - **实测发现**：Marker 在 MacBook CPU 上太慢（模型 ~3GB，无 GPU 支持）
+  - 暂时搁置——`_preprocess_pdf_text()` 已经解决了核心问题
+
+- **LlamaIndex 调研**
+  - LlamaIndex 核心是 RAG 框架（加载→切片→Embedding→向量索引→检索→LLM 回答）
+  - 分析了所有组件对 Graphex 的适用性：
+    - PDF 解析：LlamaParse（付费云端 API），不如 Marker；开源 reader 底层是 PyPDF，比 PyMuPDF 还弱
+    - Chunking：通用 RAG 切片器，不如我们的自适应对数 chunker
+    - Embedding + Retrieval：✅ 这是 LlamaIndex 最强的部分，可用于 anchor resolution
+    - Knowledge Graph：传统 entity-triple KG，跟我们的 narrative segments 不兼容
+    - Structured Output：Pydantic extraction 优雅但引入整个框架太重
+  - **结论**：Graphex 不是 RAG 应用，LlamaIndex 大部分价值用不到。Embedding 需求可用 sentence-transformers + faiss 轻量实现
 
 ### Decisions Made
-- **Marker 作为可选 PDF parser** — 通过 factory pattern 支持 auto/pymupdf/marker 三种 backend
-- **Lazy model loading** — Marker 模型 ~3GB，首次调用时加载，singleton 复用
-- **force_ocr=True 为默认** — 必须开启才能处理 inline math
+- **PyMuPDF + 预处理优先，Marker 备选** — 预处理已解决 Adam 根因，Marker 作为 GPU 环境下的升级路径保留
+- **Marker force_ocr 默认 False** — 在 CPU 上 force_ocr 太慢，改为 False；有 GPU 时可开启获得 inline math→LaTeX
+- **不引入 LlamaIndex** — Graphex 是知识提取应用不是 RAG，框架大部分组件不适用
+- **Embedding-based anchor 用轻量方案** — 后续用 sentence-transformers + faiss，不用 LlamaIndex
 
 ### Next
-- [ ] 安装 marker-pdf，用 Adam 论文验证 math 质量改善
-- [ ] Phase 1 全量重跑对比 PyMuPDF vs Marker
-- [ ] 检查 LaTeX 格式对 extraction prompt 的影响
+- [ ] Phase 1 全量重跑，验证 preprocess 对所有 10 篇论文的改善
+- [ ] 实现 embedding-based anchor resolution（sentence-transformers + faiss）
+- [ ] 加入 references 区域检测，chunking 前剥离（解决 BERT 问题）
+- [ ] 手动提供 Phase 2 PDF，跑 cross-discipline 评估
 
 ---
 

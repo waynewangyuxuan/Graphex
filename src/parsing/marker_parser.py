@@ -28,7 +28,7 @@ _converter_config = None
 
 
 def _get_converter(
-    force_ocr: bool = True,
+    force_ocr: bool = False,
     use_llm: bool = False,
 ):
     """Get or create a PdfConverter instance (singleton per config)."""
@@ -81,8 +81,9 @@ class MarkerParser:
 
     Args:
         force_ocr: Force OCR even when text is extractable.
-                   Essential for inline math → LaTeX conversion.
-                   Default True for academic papers.
+                   Improves inline math → LaTeX but MUCH slower on CPU.
+                   Default False (fast mode — still fixes U+FFFD, tables, layout).
+                   Set True only if you need inline math as LaTeX AND have GPU.
         use_llm:   Use LLM for enhanced equation/table quality.
                    Requires API key (Gemini by default).
                    Default False (works great without it for most papers).
@@ -90,7 +91,7 @@ class MarkerParser:
 
     def __init__(
         self,
-        force_ocr: bool = True,
+        force_ocr: bool = False,
         use_llm: bool = False,
     ):
         self.force_ocr = force_ocr
