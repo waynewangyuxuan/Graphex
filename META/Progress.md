@@ -4,6 +4,66 @@ Append-only development log. Add new entries at the top.
 
 ---
 
+## 2026-02-27
+
+### Completed
+
+- **Phase 2 Cross-Discipline 评估（替换 PDF + 重跑）**
+  - 替换了 4 篇坏 PDF（付费墙/404）为开放获取论文：
+    - econ-lemons: Akerlof "Market for Lemons" (UT Dallas 托管)
+    - sociology-granovetter: 同一篇换 CMU 链接
+    - bio-alphafold: AlphaFold (Nature Open Access)
+    - psych-prospect: Kahneman & Tversky "Prospect Theory" (MIT 托管)
+  - **结果**：econ-lemons 和 sociology-granovetter 仍然失败 — 1970s 扫描版 PDF，PyMuPDF 只提取到 JSTOR 元数据
+  - 三篇有效论文质量：
+    - bio-alphafold: 30 segs, 21 rels, 10S/20B, 5 acts — 优秀
+    - psych-prospect: 50 segs, 48 rels, 23S/27B, 6 acts — 非常优秀（完美映射论文结构）
+    - blog-scaling: 37 segs, 35 rels, 23S/14B, 4 acts — 大幅改善（从 122 segs 降到 37）
+  - **结论**：单论文提取在有效文本输入下非常 robust，15 篇跨学科论文全部成功
+
+- **Bitcoin nested relations fix 验证成功**
+  - 重跑结果：21 segs, **20 rels**（之前 0），12S/9B/4 acts
+  - 叙事弧完整：problem → PoW → consensus → incentives → privacy → security analysis → conclusion
+
+- **Spine/Branch 比例全面审查（13 篇论文）**
+  - 发现 **spine 偏重问题**：raft 72%, batchnorm 69%, resnet 64%, mapreduce 62%, blog-scaling 62%
+  - 根因：当前 tree prompt 的 spine 是 **flat list**，一个 act 内所有 spine 是平级兄弟
+  - 例：Raft Act 4 有 6 个平级 spine（s18-s22, s27），但 s20 应该是 s19 的实现细节
+  - Tree 实际深度 3-6 层（branch 可嵌套），但 spine 内部完全无层级
+  - psych-prospect 发现 s22 重复挂载 bug（出现在两个 act 下）
+
+- **树层级设计调研（RST + RAPTOR + PageIndex）**
+  - **RST (修辞结构理论)**：Nucleus/Satellite 递归模型 — 每对关系都区分核心/辅助，层级从递归中浮现
+  - **RAPTOR**：自底向上聚类（UMAP+GMM → LLM 摘要 → 递归），通常 2-4 层。适合 RAG 但缺少叙事因果
+  - **PageIndex**：利用文档自然结构（ToC/标题层级）构建树。对无 ToC 的论文不适用
+  - Clone + 深入分析了 RAPTOR 源码（~1300 行核心代码），产出 6 份分析文档在 `/raptor-analysis/`
+
+- **方案 C 实施：Hierarchical Spine（最小改动）**
+  - 修改 `NARRATIVE_TREE_PROMPT`：
+    - spine 从 flat `spine_ids: ["s1", "s3"]` 改为嵌套 `spine: [{id: "s1", children: [{id: "s3", rel: "develops"}]}]`
+    - 新增指导："Avoid flat lists of 4+ sibling spine nodes — look for parent-child relationships"
+    - 新增深度目标："Aim for 2-3 levels of spine depth within each act"
+  - 修改 `graph_to_tree.py._assemble_tree()`：
+    - 新增 `_collect_spine_ids()` 递归收集嵌套 spine ID
+    - 新增 `_flatten_spine_legacy()` 向后兼容旧格式
+    - 新增 `_parse_spine_node()` 从嵌套结构解析 spine parent→child 关系
+    - `build_node()` 增加 `is_spine` 参数，spine sub-children 和 branch children 合并排序
+    - `_count_spine()` 递归计数所有层级的 spine 节点
+    - 移除 "spine 不能做 child" 的硬性过滤
+
+### Decisions Made
+- **方案 C（渐进细化）优先，方案 A（RST 递归）备选** — 最小改动测试效果，不行再切 RST
+- **扫描版 PDF 不额外处理** — econ-lemons 和 granovetter 是 OCR 问题，不影响 AI 提取质量评估
+- **Phase 2 有效样本已足够** — 3 篇跨学科（生物、心理学、CS）验证了泛化能力
+
+### Next
+- [ ] **验证 Hierarchical Spine**：用 raft 和 batchnorm 测试，看 spine 比例是否降到 40-60%
+- [ ] 修复 s22 重复挂载 bug（psych-prospect）— assembly 需要检查 segment 是否已 placed
+- [ ] 实现 embedding-based anchor resolution
+- [ ] 如果方案 C 效果不佳 → 实施方案 A（RST 递归 nucleus/satellite）
+
+---
+
 ## 2026-02-24
 
 ### Completed

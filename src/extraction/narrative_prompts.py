@@ -207,32 +207,67 @@ Learning arc: {learning_arc}
 ## Current relations
 {all_relations}
 
+## Structural constraints (MUST follow)
+{constraints}
+
 ## Your task
 
-Organize these segments into a TREE with this structure:
+Organize these segments into a TREE that satisfies ALL constraints above.
 
-### 1. Identify the SPINE (main reading path)
-The spine is the sequence of segments that form the author's main argument — if a student only reads the spine, they get the core story. Typically 40-60% of all segments.
+### 1. Identify SPINE vs BRANCH segments
+SPINE = the minimum set of segments a student must read to follow the core argument. If you removed a spine node, the story would have a logical gap.
 
-Spine segments are usually: the opening problem, major mechanism introductions, key rules, turning points, final resolution, and summary. They advance the narrative.
+Branch = everything else: examples, elaborations, experimental details, comparisons, sub-problems. They enrich but are skippable.
 
-NON-spine segments are: supporting examples, elaborations, tangential details, traces, figures, sub-problems that go deeper on one point. They enrich but are not required for the main story.
+**HARD RULE: Spine count MUST be in [{spine_min}, {spine_max}] (out of {total_segments} total).**
+- If you're over {spine_max}: demote the least essential spine nodes to branches. Experimental setups, implementation details, comparisons, and validation results are almost always branches.
+- If you're under {spine_min}: promote key elaborations to sub-spine.
+- A good test: "If I delete this segment, does the logical chain break?" YES → spine. NO → branch.
 
-### 2. Assign PARENT for each non-spine segment
-Each branch segment hangs off one parent (usually a spine node). Pick the parent that best answers "this segment is a deeper look at ___".
+### 2. Organize spine into a HIERARCHY (not a flat list!)
+Within each act, spine nodes should have parent-child relationships reflecting argumentative structure:
 
-### 3. Group spine into ACTS
-Divide the spine into 2-5 acts based on major topic transitions. Give each act a short title.
+- A **top-level spine** node introduces a major claim or mechanism
+- A **sub-spine** node develops, implements, or extends that claim
+- Test: "Does this spine node make sense without reading the parent spine node?" If NO → it's a sub-spine.
 
-### 4. Identify BACK-REFERENCES
-Some relations point from a later segment back to an earlier one (e.g., contrasts, references). These don't fit the tree hierarchy. List them as see_also.
+**DEPTH LIMIT: No spine chain may exceed {max_spine_depth} levels.** If an argument chain is longer, make the deeper nodes branches instead.
+
+Each act should have {top_spine_per_act_min}–{top_spine_per_act_max} top-level spine nodes (direct children of the act).
+
+### 3. Assign branch segments to parents
+Each branch hangs off one parent (spine or another branch). Pick the parent that best answers "this segment is a deeper look at ___".
+
+### 4. Group into ACTS
+Divide the top-level spine into {acts_min}–{acts_max} acts based on major topic transitions.
+
+### 5. ALL segments must be assigned
+Every segment ID must appear exactly once — either in a spine hierarchy or in the branches list. Orphan count must be 0.
+
+### 6. Identify BACK-REFERENCES
+Cross-act or backward-pointing relations → list as see_also (these do NOT count toward spine/branch placement).
+
+### 7. SELF-CHECK before outputting
+Count your spine and branch nodes. Verify:
+- spine count is in [{spine_min}, {spine_max}] — if not, move nodes between spine/branch until it is
+- every segment ID appears exactly once
+- no spine chain exceeds {max_spine_depth} levels
+If any check fails, fix it before producing the JSON.
 
 ## Output: Return ONLY valid JSON, no markdown fences.
 {
   "acts": [
     {
       "title": "Short act title",
-      "spine_ids": ["s1", "s3", "s5"]
+      "spine": [
+        {
+          "id": "s1",
+          "children": [
+            {"id": "s3", "rel": "develops"}
+          ]
+        },
+        {"id": "s5"}
+      ]
     }
   ],
   "branches": [

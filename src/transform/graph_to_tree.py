@@ -84,6 +84,62 @@ def _call_llm(system: str, user: str, model: str, max_tokens: int = 4096) -> dic
     return {"data": data, "raw": raw, "tokens": tokens}
 
 
+# ── Structural constraints ──────────────────────────────────────────────
+
+def _compute_tree_constraints(n_segments: int) -> dict:
+    """Compute structural constraints for tree decision based on segment count.
+
+    Returns a dict with numeric bounds and a human-readable summary for prompt injection.
+    All ranges are derived from n_segments so the LLM gets concrete targets.
+    """
+    n = n_segments
+
+    # Spine ratio: 35–55% of total segments
+    spine_min = max(3, round(n * 0.35))
+    spine_max = max(spine_min + 1, round(n * 0.55))
+
+    # Acts: scale with document size
+    if n <= 12:
+        acts_min, acts_max = 2, 3
+    elif n <= 30:
+        acts_min, acts_max = 3, 5
+    elif n <= 60:
+        acts_min, acts_max = 4, 6
+    else:
+        acts_min, acts_max = 4, 7
+
+    # Max spine depth: cap at 4 (prevents runaway chains)
+    max_spine_depth = 4
+
+    # Top-level spine per act: 2–4
+    top_spine_per_act_min = 2
+    top_spine_per_act_max = 4
+
+    # Build human-readable summary
+    branch_min = n - spine_max
+    branch_max = n - spine_min
+    summary = (
+        f"Total segments: {n}\n"
+        f"- Spine count: {spine_min}–{spine_max} segments (target ~{round(n * 0.45)})\n"
+        f"- Branch count: {branch_min}–{branch_max} segments\n"
+        f"- Acts: {acts_min}–{acts_max}\n"
+        f"- Top-level spine per act: {top_spine_per_act_min}–{top_spine_per_act_max}\n"
+        f"- Max spine nesting depth: {max_spine_depth} levels (no deeper chains)\n"
+        f"- Orphans: 0 (every segment must be placed exactly once)"
+    )
+
+    return {
+        "spine_min": spine_min,
+        "spine_max": spine_max,
+        "acts_min": acts_min,
+        "acts_max": acts_max,
+        "max_spine_depth": max_spine_depth,
+        "top_spine_per_act_min": top_spine_per_act_min,
+        "top_spine_per_act_max": top_spine_per_act_max,
+        "summary": summary,
+    }
+
+
 # ── Core: LLM-based tree structuring ────────────────────────────────────
 
 def graph_to_tree(
@@ -135,12 +191,27 @@ def graph_to_tree(
     theme = schema.get("theme", "") if schema else ""
     learning_arc = schema.get("learning_arc", "") if schema else ""
 
+    # ── Compute structural constraints from segment count ──
+    n = len(segments)
+    constraints = _compute_tree_constraints(n)
+
     prompt = NARRATIVE_TREE_PROMPT
     prompt = prompt.replace("{topic}", topic)
     prompt = prompt.replace("{theme}", theme)
     prompt = prompt.replace("{learning_arc}", learning_arc)
     prompt = prompt.replace("{all_segments}", all_segments_str)
     prompt = prompt.replace("{all_relations}", all_relations_str)
+
+    # Inject constraint values
+    prompt = prompt.replace("{constraints}", constraints["summary"])
+    prompt = prompt.replace("{spine_min}", str(constraints["spine_min"]))
+    prompt = prompt.replace("{spine_max}", str(constraints["spine_max"]))
+    prompt = prompt.replace("{max_spine_depth}", str(constraints["max_spine_depth"]))
+    prompt = prompt.replace("{top_spine_per_act_min}", str(constraints["top_spine_per_act_min"]))
+    prompt = prompt.replace("{top_spine_per_act_max}", str(constraints["top_spine_per_act_max"]))
+    prompt = prompt.replace("{acts_min}", str(constraints["acts_min"]))
+    prompt = prompt.replace("{acts_max}", str(constraints["acts_max"]))
+    prompt = prompt.replace("{total_segments}", str(n))
 
     # ── Call LLM (scale max_tokens by segment count) ──
     # Each segment needs ~40 tokens in the output (spine_id or branch entry)
@@ -169,12 +240,39 @@ def graph_to_tree(
 
 # ── Assembly: combine LLM decision with segment data ────────────────────
 
+def _collect_spine_ids(spine_nodes: list) -> set[str]:
+    """Recursively collect all spine IDs from nested spine structure."""
+    ids = set()
+    for node in spine_nodes:
+        if isinstance(node, str):
+            ids.add(node)
+        elif isinstance(node, dict):
+            sid = node.get("id", "")
+            if sid:
+                ids.add(sid)
+            for child in node.get("children", []):
+                ids.update(_collect_spine_ids([child]))
+    return ids
+
+
+def _flatten_spine_legacy(act: dict) -> list:
+    """Handle legacy flat spine_ids format: convert to new nested format."""
+    spine_ids = act.get("spine_ids", [])
+    if spine_ids:
+        # Old format: {"spine_ids": ["s1", "s3", "s5"]}
+        return [{"id": sid} for sid in spine_ids]
+    return act.get("spine", [])
+
+
 def _assemble_tree(
     segments: list[dict],
     decision: dict,
     schema: Optional[dict],
 ) -> dict:
-    """Build the final tree dict from LLM's structuring decision + segment data."""
+    """Build the final tree dict from LLM's structuring decision + segment data.
+
+    Supports both legacy flat spine_ids and new hierarchical spine format.
+    """
     seg_map = {s["id"]: s for s in segments}
 
     # Parse LLM decision
@@ -182,14 +280,44 @@ def _assemble_tree(
     branches = decision.get("branches", [])
     see_also = decision.get("see_also", [])
 
-    # Collect all spine IDs so we can reject branches that target spine nodes
+    # Normalize: support both old spine_ids and new spine format
+    for act in acts:
+        if "spine" not in act:
+            act["spine"] = _flatten_spine_legacy(act)
+
+    # Collect ALL spine IDs (including nested sub-spine)
     spine_ids = set()
     for act in acts:
-        for sid in act.get("spine_ids", []):
-            spine_ids.add(sid)
+        spine_ids.update(_collect_spine_ids(act["spine"]))
 
-    # Build parent→children mapping, filtering out cycles and invalid refs
-    children_of: dict[str, list[dict]] = {}  # parent_id → list of {child_id, rel}
+    # Collect spine parent→child relationships from nested spine structure
+    spine_children_of: dict[str, list[dict]] = {}
+
+    def _parse_spine_node(node) -> str | None:
+        """Parse a spine node (string or dict) and register its children."""
+        if isinstance(node, str):
+            return node
+        if isinstance(node, dict):
+            sid = node.get("id", "")
+            if not sid or sid not in seg_map:
+                return None
+            children = node.get("children", [])
+            if children:
+                spine_children_of[sid] = []
+                for child in children:
+                    child_id = _parse_spine_node(child)
+                    if child_id:
+                        rel = child.get("rel", "develops") if isinstance(child, dict) else "develops"
+                        spine_children_of[sid].append({"child_id": child_id, "rel": rel})
+            return sid
+        return None
+
+    for act in acts:
+        for spine_node in act["spine"]:
+            _parse_spine_node(spine_node)
+
+    # Build parent→children mapping for BRANCH nodes
+    children_of: dict[str, list[dict]] = {}
     for b in branches:
         pid = b.get("parent_id", "")
         cid = b.get("child_id", "")
@@ -199,7 +327,7 @@ def _assemble_tree(
         if pid == cid:
             continue  # self-loop
         if cid in spine_ids:
-            continue  # spine nodes should not be children
+            continue  # spine nodes are positioned by spine structure, not branches
         if pid not in children_of:
             children_of[pid] = []
         children_of[pid].append({"child_id": cid, "rel": rel})
@@ -215,11 +343,9 @@ def _assemble_tree(
         visited.discard(start)
         return False
 
-    # Remove edges that create cycles
     for pid in list(children_of.keys()):
         safe_kids = []
         for kid in children_of[pid]:
-            # Temporarily add and test
             test_visited: set[str] = set()
             children_of[pid] = safe_kids + [kid]
             if _has_cycle(pid, test_visited):
@@ -239,16 +365,15 @@ def _assemble_tree(
 
     # Track which segments are accounted for
     placed = set()
-    # Guard against any remaining cycles during recursion
-    _building = set()
+    _building = set()  # cycle guard
 
-    def build_node(seg_id: str, rel: str = "") -> Optional[dict]:
+    def build_node(seg_id: str, rel: str = "", is_spine: bool = False) -> Optional[dict]:
         """Recursively build a tree node."""
         seg = seg_map.get(seg_id)
         if not seg:
             return None
         if seg_id in _building:
-            return None  # cycle — bail out
+            return None  # cycle guard
         placed.add(seg_id)
         _building.add(seg_id)
 
@@ -263,22 +388,30 @@ def _assemble_tree(
         }
         if rel:
             node["rel"] = rel
+        if is_spine:
+            node["spine"] = True
         if seg.get("source_range"):
             node["source_range"] = seg["source_range"]
-
-        # Add see_also
         if seg_id in see_also_of:
             node["see_also"] = see_also_of[seg_id]
 
-        # Recursively add children
-        if seg_id in children_of:
-            # Sort children by narrative order
+        # Collect all children: spine sub-children + branch children
+        all_kids = []
+
+        # Spine sub-children first (sub-spine nodes)
+        for kid in spine_children_of.get(seg_id, []):
+            all_kids.append((kid["child_id"], kid["rel"], True))  # is_spine=True
+
+        # Branch children
+        for kid in children_of.get(seg_id, []):
+            all_kids.append((kid["child_id"], kid["rel"], False))
+
+        if all_kids:
             seg_order = {s["id"]: i for i, s in enumerate(segments)}
-            kids = sorted(children_of[seg_id],
-                          key=lambda c: seg_order.get(c["child_id"], 999))
+            all_kids.sort(key=lambda k: seg_order.get(k[0], 999))
             node["children"] = []
-            for kid in kids:
-                child_node = build_node(kid["child_id"], kid["rel"])
+            for kid_id, kid_rel, kid_is_spine in all_kids:
+                child_node = build_node(kid_id, kid_rel, is_spine=kid_is_spine)
                 if child_node:
                     node["children"].append(child_node)
 
@@ -294,17 +427,18 @@ def _assemble_tree(
             "title": act.get("title", f"Act {ai + 1}"),
             "children": [],
         }
-        for sid in act.get("spine_ids", []):
-            spine_node = build_node(sid)
-            if spine_node:
-                spine_node["spine"] = True
-                act_node["children"].append(spine_node)
+        # Only top-level spine nodes become direct children of the act
+        for spine_entry in act["spine"]:
+            sid = spine_entry.get("id", "") if isinstance(spine_entry, dict) else spine_entry
+            if sid and sid not in placed:
+                spine_node = build_node(sid, is_spine=True)
+                if spine_node:
+                    act_node["children"].append(spine_node)
         act_nodes.append(act_node)
 
     # Handle orphans — segments not placed in any act or branch
     orphan_ids = [s["id"] for s in segments if s["id"] not in placed]
     if orphan_ids and act_nodes:
-        # Attach to the last act
         for oid in orphan_ids:
             orphan_node = build_node(oid, "related")
             if orphan_node:
@@ -314,9 +448,18 @@ def _assemble_tree(
     topic = schema.get("topic", "Narrative") if schema else "Narrative"
     root_title = topic.split(":")[0].strip() if ":" in topic else topic[:60]
 
-    all_spine = sum(
-        len(a.get("spine_ids", [])) for a in acts
-    )
+    # Count spine vs branch
+    def _count_spine(node_list):
+        count = 0
+        for n in node_list:
+            if n.get("spine"):
+                count += 1
+            count += _count_spine(n.get("children", []))
+        return count
+
+    total_spine = 0
+    for act_node in act_nodes:
+        total_spine += _count_spine(act_node.get("children", []))
 
     root = {
         "id": "root",
@@ -325,8 +468,8 @@ def _assemble_tree(
         "children": act_nodes,
         "meta": {
             "total_segments": len(segments),
-            "spine_segments": all_spine,
-            "branch_segments": len(segments) - all_spine,
+            "spine_segments": total_spine,
+            "branch_segments": len(segments) - total_spine,
             "acts": len(act_nodes),
             "see_also_count": len(see_also),
         },
