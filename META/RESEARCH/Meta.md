@@ -8,6 +8,9 @@
 - **[Cognitive_Foundations.md](Cognitive_Foundations.md)** - Cognitive science foundations for knowledge graph design (Kintsch, Collins & Loftus, Paivio, etc.)
 - **[Node_Edge_Schema.md](Node_Edge_Schema.md)** - Node and Edge schema definitions based on cognitive science research
 - **[KG_Pipeline_Patterns.md](KG_Pipeline_Patterns.md)** - Production-validated KG extraction patterns from GraphRAG/nano-graphrag (Gleaning, Entity Resolution, Community Detection roadmap)
+- **[Anchor_Audit.md](Anchor_Audit.md)** - Anchor resolution quality audit (batchnorm, 2026-03-07): root causes, fixes, post-fix results
+- **[Narrative_Schema.md](Narrative_Schema.md)** - Narrative segment schema and extraction design
+- **[PDF_Parsing_Upgrade.md](PDF_Parsing_Upgrade.md)** - PyMuPDF vs Marker comparison, GPU upgrade path
 
 ### Knowledge Modules (Prism)
 - **[graphiti-er-module/](graphiti-er-module/)** - Graphiti-style cascading entity resolution pattern

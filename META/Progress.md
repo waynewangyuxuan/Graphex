@@ -17,13 +17,35 @@ Append-only development log. Add new entries at the top.
     - Anchor resolver 收到的全文 PDF 文本已被清理（如 `activation`）
     - 结果：anchor 和全文不一致 → exact match 全部失败
   - **38% 的 anchor (13/34)** 含 PDF 连字符断行 artifact
-  - 另有部分 anchor 因 chunk/全文 PDF 提取差异导致不匹配
   - **结论**：不是 LLM 问题，不是 resolver 问题，是 **数据流一致性** 问题
 
-### Pending — Next Fix
-- **Chunk 预处理**：在 chunk 送入 LLM 之前跑 `_normalize_pdf_breaks()` 清理连字符
-  - 确保 LLM 看到的文本和 resolver 用的全文一致
-  - 预期：大部分 anchor 直接升级为 exact match (conf=1.0)
+- **Anchor Quality Audit (Round 3) → 换行符 vs 空格**
+  - Dehyphenation 修复后结果：**2 exact / 27 text-fuzzy / 3 embedding / 0 failed**
+  - 27 个 text-fuzzy 的唯一差异：PDF 原文中 `\n` (U+000A) vs LLM 输出中 ` ` (U+0020)
+  - LLM 在 JSON string 中自动把换行替换为空格 — 正常行为
+  - 3 个 embedding：2 个位置正确、1 个 paraphrase 导致错位 (s9)
+
+- **PDF 预处理两步修复 — Anchor 质量从 0% → 47% exact**
+  1. `_preprocess_pdf_text()` 新增 dehyphenation：`re.sub(r'-\s*\n\s*', '', text)`
+     - 修复 `activa-\ntion` → `activation`，解决 38% 的连字符问题
+  2. `_preprocess_pdf_text()` 新增段内换行归一化：`re.sub(r'(?<!\n)\n(?!\n)', ' ', text)`
+     - 将 PDF 段内单换行替换为空格，保留双换行（段落边界）
+     - 确保 LLM 的 JSON 空格与源文本一致
+  - **最终 batchnorm 结果：26 exact / 29 text-fuzzy / 0 embedding / 0 failed**
+
+- **Anchor 演进完整记录（batchnorm）**
+
+  | 版本 | Exact | Text-fuzzy | Embedding | Failed |
+  |------|-------|------------|-----------|--------|
+  | v1 起点 | 0 | 5 | 21 | 0 |
+  | v2 verbatim prompt | 0 | 24 | 10 | 0 |
+  | v3 dehyphenation | 2 | 27 | 3 | 0 |
+  | **v4 newline→space** | **26** | **29** | **0** | **0** |
+
+### Status
+- **Anchor pipeline**: ✅ Solved — 47% exact, 0% embedding fallback, 0% failure
+- **Spine ratio**: ⚠️ Still high — 23/29 = 79%（目标 35-55%）
+- **Next**: 可以开始做 app，或先继续调 spine ratio
 
 ---
 

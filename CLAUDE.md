@@ -11,16 +11,14 @@ Graphex transforms knowledge consumption into a structured, active learning expe
 - **Weak Retrieval Practice**: Integrates testing and verification of understanding
 - **Cross-source Synthesis**: Enables multi-document relationship discovery
 
-The system is grounded in cognitive science research (Kintsch's Construction-Integration Model, spreading activation theory, dual coding) and uses a multi-agent AI architecture for knowledge extraction.
+The system is grounded in cognitive science research (Kintsch's Construction-Integration Model, spreading activation theory, dual coding) and uses an LLM-based narrative extraction pipeline.
 
 ## Current Phase
 
-**MVP Core Pipeline Testing** - We are validating the core business logic:
-- Node/Edge schema design
-- AI extraction workflow
-- Multi-agent pipeline architecture
-
-Frontend work is explicitly deferred until core logic is proven.
+**Pipeline Refinement + Frontend Planning** - The core extraction pipeline is proven and working end-to-end. Current focus:
+- Refining extraction quality (anchor resolution, spine/branch ratio)
+- Evaluation suite for measuring pipeline accuracy across papers
+- Planning frontend interactive graph/tree views
 
 ## Quick Start
 
@@ -42,44 +40,44 @@ pytest
 
 ## Documentation
 
-All project documentation lives in the `Meta/` folder:
+All project documentation lives in the `META/` folder:
 
 | Folder | Purpose |
 |--------|---------|
-| [Meta/Core/](Meta/Core/Meta.md) | Core documents (Product, Technical) |
-| [Meta/Research/](Meta/Research/Meta.md) | Cognitive science research foundations |
-| [Meta/Decisions/](Meta/Decisions/Meta.md) | Architecture Decision Records |
-| [Meta/Milestone/](Meta/Milestone/Meta.md) | Milestone planning and tracking |
+| [META/Core/](META/Core/Meta.md) | Core documents (Product, Technical) |
+| [META/Research/](META/Research/Meta.md) | Cognitive science research foundations |
+| [META/Decisions/](META/Decisions/Meta.md) | Architecture Decision Records |
+| [META/Milestone/](META/Milestone/Meta.md) | Milestone planning and tracking |
 
 Quick links:
-- [Product Requirements](Meta/Core/Product.md)
-- [Technical Architecture](Meta/Core/Technical.md)
-- [Node/Edge Schema](Meta/Research/Node_Edge_Schema.md)
-- [Current Progress](Meta/Progress.md)
+- [Product Requirements](META/Core/Product.md)
+- [Technical Architecture](META/Core/Technical.md)
+- [Narrative Schema](META/Research/Narrative_Schema.md)
+- [Current Progress](META/Progress.md)
 - [Change Log](CHANGELOG.md)
 
 ## Architecture
 
-### Multi-Agent Pipeline
+### Extraction Pipeline
 
 ```
-PDF → Parser → Chunker → Entity Extractor → Relation Extractor → Validator → Graph
-                              ↓                    ↓                  ↓
-                         Entity Registry (shared state)
+PDF → PyMuPDF Parser → _preprocess_pdf_text() → Adaptive Chunker → Narrative Extractor (LLM) → Review Pass → Anchor Resolver → Graph-to-Tree
 ```
 
-**Core Agents (MVP)**:
-1. Entity Extractor - Identifies entities per chunk
-2. Relation Extractor - Finds relationships between entities
-3. Validator - Checks quality, flags low-confidence results
+**Key Components**:
+1. **PDF Parser** (`src/parsing/pdf_parser.py`) -- PyMuPDF-based, with marker-pdf as optional GPU backend
+2. **Adaptive Chunker** (`src/chunking/programmatic_chunker.py`) -- Logarithmic chunk scaling based on document size
+3. **Narrative Extractor** (`src/extraction/narrative_extractor.py`) -- Single-pass LLM extraction producing segments + relations per chunk, with JSON salvage + retry
+4. **Anchor Resolver** (`src/binding/anchor_resolver.py`) -- 7-level cascade (exact to embedding fallback) for text-graph binding
+5. **Graph-to-Tree** (`src/transform/graph_to_tree.py`) -- LLM-based graph to hierarchical spine tree with structural constraints
 
-### Node/Edge Schema
+### Narrative Segment Schema
 
-**MVP Node Types**: Concept, Event, Agent, Claim, Fact
-
-**MVP Edge Types**: IsA, PartOf, Causes, Before, HasProperty, Supports, Attacks, RelatedTo
-
-See [Node_Edge_Schema.md](Meta/Research/Node_Edge_Schema.md) for full definitions.
+The pipeline produces narrative segments (not entity-relation triples). Each segment has:
+- `id`, `type` (mechanism, context, evidence, etc.), `title`, `content`
+- `anchor` (verbatim text span for text-graph binding)
+- `concepts` (tagged with role: introduces/develops/applies)
+- `relations` (typed connections between segments)
 
 ## Development Workflow
 
@@ -112,31 +110,38 @@ Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
 Graphex/
 ├── CLAUDE.md              # This file
 ├── CHANGELOG.md           # Release history
-├── Meta/                  # Documentation
+├── META/                  # Documentation
 │   ├── Core/              # Product, Technical docs
 │   ├── Research/          # Cognitive science research
 │   ├── Decisions/         # ADRs
 │   └── Milestone/         # Milestone tracking
-├── src/                   # Source code (TBD)
-│   ├── pipeline/          # Pipeline orchestration
-│   ├── agents/            # AI agents
-│   ├── chunking/          # Document chunking
-│   └── context/           # Context management
+├── src/                   # Source code
+│   ├── parsing/           # PDF parsing (pdf_parser.py, marker_parser.py)
+│   ├── chunking/          # Adaptive chunking (programmatic_chunker.py)
+│   ├── extraction/        # Narrative extraction (narrative_extractor.py, narrative_prompts.py)
+│   ├── binding/           # Anchor resolution (anchor_resolver.py)
+│   ├── transform/         # Graph-to-tree (graph_to_tree.py)
+│   └── resolution/        # Entity resolution (entity_resolver.py, parallel_merge.py)
+├── experiments/           # Experiment infrastructure
+│   ├── eval/              # Evaluation suite (run_eval.py, test_corpus.py, audit_anchor_quality.py)
+│   ├── runners/           # Experiment runners
+│   ├── configs/           # Experiment configs
+│   └── results/           # Output results
 └── tests/                 # Test suite
 ```
 
 ### Labels
-See [Meta/Labels.md](Meta/Labels.md) for issue/PR labeling conventions.
+See [META/Labels.md](META/Labels.md) for issue/PR labeling conventions.
 
 ## Contributing
 
 ### Making Decisions
 For architectural decisions:
-1. Create an ADR in `Meta/Decisions/`
-2. Use template: `Meta/Decisions/_TEMPLATE.md`
+1. Create an ADR in `META/Decisions/`
+2. Use template: `META/Decisions/_TEMPLATE.md`
 3. Update status once decided
 
 ### Tracking Progress
-- Update [Progress.md](Meta/Progress.md) daily during active development
-- Move completed items in [Todo.md](Meta/Todo.md) to archive
+- Update [Progress.md](META/Progress.md) daily during active development
+- Move completed items in [Todo.md](META/Todo.md) to archive
 - Update milestone status when deliverables complete
