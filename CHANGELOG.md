@@ -8,6 +8,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Embedding-Based Anchor Resolution** (2026-03-07) — Semantic fallback for failed text-based anchors
+  - `_split_sentences()`: Regex-based sentence splitter with character positions
+  - `_embedding_resolve()`: Batch encode anchors + sentences, cosine similarity top-1 matching
+  - Uses `sentence-transformers/all-MiniLM-L6-v2` (384d, local model, lazy-loaded singleton)
+  - New cascade: `exact(1.0) → case-insensitive(0.9) → normalized(0.8) → exact-no-order(0.75) → embedding(0.3-0.7) → failed(0.0)`
+  - Stats output now shows `exact / text-fuzzy / embedding / failed` breakdown
+- **Dynamic Tree Structural Constraints** (2026-03-07) — Math-based bounds injected into tree prompt
+  - `_compute_tree_constraints(n)`: Computes spine range (35-55%), act range, max depth (4), orphan tolerance (0)
+  - Constraints injected as concrete numbers into `NARRATIVE_TREE_PROMPT`
+  - Self-check step (Step 7): LLM must verify constraint compliance before JSON output
+- **Hierarchical Spine in Tree Prompt** (2026-03-07) — Spine nodes can now nest within acts
+  - Spine format changed from flat `spine_ids: [str]` to nested `spine: [{id, children: [{id, rel}]}]`
+  - `_assemble_tree()` rewritten: `_collect_spine_ids()`, `_parse_spine_node()`, `_flatten_spine_legacy()`
+  - Backward compatible with old flat format
+
+### Changed
+- **Extraction Prompt: Verbatim Anchor Enforcement** (2026-03-07): Strengthened anchor instructions with strict rules, self-check step, and expanded length (8-20 words) to eliminate LLM paraphrasing
+- **Anchor Cascade: PDF Dehyphenation** (2026-03-07): Added `_normalize_pdf_breaks()` and `_try_pdf_cleaned()` (conf 0.78) to handle PDF line-break artifacts; cascade now 7 levels
+
+### Discovered
+- **Pipeline Data Inconsistency** (2026-03-08): Chunks contain raw PDF artifacts (e.g., `activa- tion`) but resolver receives cleaned full text (`activation`). LLM faithfully copies verbatim from chunks → 0 exact matches. Root cause is pre-processing gap, not LLM or resolver failure. Fix: normalize chunks before LLM extraction.
+- **Spine Definition Tightened** (2026-03-07): From "advance the narrative" to "if removed, does the logical chain break?"
+  - Experimental setups, implementation details, comparisons, validation results → almost always branches
+- **Anchor Resolution Cascade Simplified** (2026-03-07): Removed `_try_prefix_words` (3-word match caused 81% mismatch)
+  - Tightened `_try_normalized` back-mapping from 3-word to 8-word prefix requirement
+  - Embedding handles all remaining non-exact matches
+
+### Fixed
+- **Spine ratio imbalance** (2026-03-07): raft 72%→60%, batchnorm 85%→58% spine ratio (target 35-55%)
+- **Tree depth explosion** (2026-03-07): raft Act 3 had depth=7 linear chain, now capped at 4
+- **Orphan dumping** (2026-03-07): 10 orphans in raft Act 6, now 0 across all papers
+- **False-positive fuzzy anchors** (2026-03-07): `_try_prefix_words` matched on 3 words, often pointing to wrong locations
+
 - **Marker PDF Parser Integration** (2026-02-24) — Optional upgrade path for GPU environments
   - `src/parsing/marker_parser.py`: MarkerParser class with lazy model loading, `force_ocr` and `use_llm` options
   - `src/parsing/pdf_parser.py`: Added `create_parser(backend)` factory — auto/pymupdf/marker

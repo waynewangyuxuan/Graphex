@@ -95,7 +95,14 @@ For each segment, tag the key concepts it touches. Mark each as:
 Use consistent concept labels — check the "Story so far" for concept names already used and reuse them exactly.
 
 ### Anchor phrase (for text-graph binding)
-For each segment, quote a SHORT phrase (8-15 words) copied EXACTLY from the section text that marks where this segment begins. This must be a verbatim substring of the input text — do not paraphrase.
+For each segment, quote a phrase (8-20 words) copied **character-for-character** from the section text that marks where this segment begins.
+
+STRICT RULES for anchor phrases:
+- The anchor MUST be a contiguous substring that appears verbatim in the input text.
+- Do NOT paraphrase, reorder, abbreviate, or correct any words.
+- Do NOT insert words that are not in the original text.
+- Copy-paste directly from the input — if you cannot find a suitable phrase, use a longer span (up to 20 words) to ensure uniqueness.
+- SELF-CHECK: After writing each anchor, mentally verify it exists word-for-word in the section text above. If it does not, fix it.
 
 ### Connecting to earlier segments
 CRITICAL: When a new segment relates to a segment from an earlier section, create a cross-section relation. This is how the narrative graph becomes connected.
@@ -108,7 +115,7 @@ CRITICAL: When a new segment relates to a segment from an earlier section, creat
       "type": "mechanism",
       "title": "short title (5-10 words)",
       "content": "2-4 sentence summary of what this segment teaches",
-      "anchor": "exact quote from the text (8-15 words)",
+      "anchor": "verbatim substring from input (8-20 words, must exist character-for-character)",
       "concepts": [
         {"label": "Concept Name", "role": "introduces"}
       ],

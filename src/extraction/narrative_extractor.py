@@ -33,6 +33,8 @@ def _preprocess_pdf_text(text: str) -> str:
     - U+FFFD replacement characters (failed PDF glyph conversions)
     - Ligature normalization (ﬁ→fi, ﬂ→fl, ﬀ→ff, etc.)
     - Unicode math symbols → ASCII readable (β→beta, θ→theta, etc.)
+    - Hyphenated line breaks (activa-\\ntion → activation)
+    - Single newlines within paragraphs → spaces (anchor consistency)
     - Excessive whitespace from column layouts
     """
     # 1. Remove U+FFFD replacement characters (PDF parsing artifacts)
@@ -54,10 +56,22 @@ def _preprocess_pdf_text(text: str) -> str:
     #    which often causes JSON generation to break on math-heavy papers.
     text = _normalize_math_symbols(text)
 
-    # 4. Collapse runs of 3+ spaces (PDF column artifacts) to single space
-    text = re.sub(r" {3,}", " ", text)
+    # 4. Dehyphenate line breaks: "activa-\ntion" → "activation"
+    #    This is critical for anchor consistency — the LLM copies verbatim
+    #    from chunks, and anchor resolver matches against the same text.
+    text = re.sub(r'-\s*\n\s*', '', text)
 
-    # 5. Remove null bytes and other control characters (except \n, \t, \r)
+    # 5. Collapse single newlines within paragraphs to spaces.
+    #    PDF text has hard line breaks mid-sentence; LLM outputs JSON strings
+    #    where these become spaces. Normalizing here ensures LLM's verbatim
+    #    anchor (with spaces) matches the document text exactly.
+    #    Preserve paragraph breaks (double newlines) for chunking boundaries.
+    text = re.sub(r'(?<!\n)\n(?!\n)', ' ', text)
+
+    # 6. Collapse runs of 2+ spaces (PDF column artifacts + step 5 residuals)
+    text = re.sub(r" {2,}", " ", text)
+
+    # 6. Remove null bytes and other control characters (except \n, \t, \r)
     text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)
 
     return text
@@ -763,8 +777,11 @@ def extract_narrative(
     anchor_stats = {
         "total": len(anchor_matches),
         "exact": sum(1 for m in anchor_matches if m.confidence == 1.0),
-        "fuzzy": sum(1 for m in anchor_matches if 0 < m.confidence < 1.0),
+        "text_fuzzy": sum(1 for m in anchor_matches if m.confidence >= 0.75),
+        "embedding": sum(1 for m in anchor_matches if 0 < m.confidence < 0.75),
         "failed": sum(1 for m in anchor_matches if m.confidence == 0.0),
+        # Legacy compat
+        "fuzzy": sum(1 for m in anchor_matches if 0 < m.confidence < 1.0),
     }
 
     # Tree structuring: LLM-based graph → tree conversion

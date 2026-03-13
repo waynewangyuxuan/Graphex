@@ -117,7 +117,9 @@ def run_single(doc_id: str, model: str, parser_backend: str = "auto") -> dict | 
     print(f"  Segments: {n_seg}")
     print(f"  Relations: {n_rel}")
     print(f"  Tree: {meta.get('spine_segments', '?')} spine / {meta.get('branch_segments', '?')} branch / {meta.get('acts', '?')} acts")
-    print(f"  Anchors: {anchors.get('exact', 0)} exact, {anchors.get('fuzzy', 0)} fuzzy, {anchors.get('failed', 0)} failed")
+    emb = anchors.get('embedding', 0)
+    tf = anchors.get('text_fuzzy', 0)
+    print(f"  Anchors: {anchors.get('exact', 0)} exact, {tf} text-fuzzy, {emb} embedding, {anchors.get('failed', 0)} failed")
     print(f"  Tokens: in={result['tokens']['input']}, out={result['tokens']['output']}")
     print(f"  Time: {elapsed:.1f}s")
 

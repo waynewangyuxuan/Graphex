@@ -4,6 +4,107 @@ Append-only development log. Add new entries at the top.
 
 ---
 
+## 2026-03-08
+
+### Completed
+
+- **Anchor Quality Audit (Round 2) → Pipeline 数据不一致根因**
+  - Batchnorm 重跑结果（verbatim prompt 生效后）：**0 exact / 24 text-fuzzy / 10 embedding / 0 failed**
+  - Verbatim prompt 有效：text-fuzzy 从 5 → 24，embedding 从 21 → 10
+  - **0 exact 的根因**：Pipeline 两端数据不一致
+    - Chunking 阶段：pdfplumber 提取保留了 PDF 连字符断行（如 `activa- tion`）
+    - LLM 忠实地从 chunk 中复制了 verbatim anchor（含连字符）
+    - Anchor resolver 收到的全文 PDF 文本已被清理（如 `activation`）
+    - 结果：anchor 和全文不一致 → exact match 全部失败
+  - **38% 的 anchor (13/34)** 含 PDF 连字符断行 artifact
+  - 另有部分 anchor 因 chunk/全文 PDF 提取差异导致不匹配
+  - **结论**：不是 LLM 问题，不是 resolver 问题，是 **数据流一致性** 问题
+
+### Pending — Next Fix
+- **Chunk 预处理**：在 chunk 送入 LLM 之前跑 `_normalize_pdf_breaks()` 清理连字符
+  - 确保 LLM 看到的文本和 resolver 用的全文一致
+  - 预期：大部分 anchor 直接升级为 exact match (conf=1.0)
+
+---
+
+## 2026-03-07 (Update 2)
+
+### Completed
+
+- **Anchor Quality Audit (Round 1) → Root Cause Analysis**
+  - 对 batchnorm 结果做了全面质量审计（26 segments）
+  - **总体准确率 46%** — text-fuzzy 80% (4/5), embedding 38% (8/21)
+  - 识别三大根因：
+    1. **LLM anchor 幻觉（15%）**：LLM 在 paraphrase 而非引用原文
+    2. **PDF 换行/连字符（11.5%）**：`continu-\nously` vs `continuously`
+    3. **Embedding 位置错误（27%）**：语义相似 ≠ 位置正确
+
+- **Extraction Prompt 强化 — Verbatim Anchor**
+  - Anchor 指令从 "copied EXACTLY" 升级为多条 STRICT RULES
+  - 新增 SELF-CHECK 要求：LLM 写完每个 anchor 后必须验证存在于原文
+  - 允许长度从 8-15 扩展到 8-20 words，优先保证唯一性
+  - Schema 中 anchor 字段描述改为 "verbatim substring... must exist character-for-character"
+
+- **PDF Line-Break Normalization (Resolver 侧)**
+  - 新增 `_normalize_pdf_breaks()` — 处理 hyphenated line breaks (`continu-\nously` → `continuously`) 和 stray newlines
+  - 新增 `_try_pdf_cleaned()` — 在 PDF-cleaned text 上匹配，confidence 0.78
+  - Cascade 更新为 7 层：`exact(1.0) → case-insensitive(0.9) → normalized(0.8) → pdf-cleaned(0.78) → exact-no-order(0.75) → embedding(0.3-0.7) → failed(0.0)`
+
+---
+
+## 2026-03-07
+
+### Completed
+
+- **Tree Structural Constraints（动态数学约束注入）**
+  - 新增 `_compute_tree_constraints(n_segments)` — 根据 segment 数量自动计算：
+    - `spine_min/max`: 35%–55% of n（如 n=68 → 24–37）
+    - `acts_min/max`: 阶梯式缩放（≤12→2-3, ≤30→3-5, ≤60→4-6, >60→4-7）
+    - `max_spine_depth`: 固定 4（防止 Act 3 那种 depth=7 的链式 spine）
+    - `top_spine_per_act`: 2–4
+    - `orphans`: 强制 0
+  - 约束以人类可读摘要注入到 `NARRATIVE_TREE_PROMPT` 的 `## Structural constraints (MUST follow)` 区域
+  - **Spine 定义收紧**：从 "advance the narrative" 改为 "如果删掉，逻辑链会断吗？"
+    - 明确指出 experimental setups, implementation details, comparisons, validation results 几乎总是 branch
+  - **Self-check 步骤 (Step 7)**：LLM 在输出 JSON 前必须验证 spine count 在 range 内
+  - **Raft 测试结果（有约束 vs 无约束）**：
+    - Spine: 72% → 60%（改善，目标 35-55%）
+    - Max depth: 7 → 4（修复）
+    - Orphans: 10 → 0（修复）
+    - 每个 act 严格 2–3 个 top-level spine
+  - **Batchnorm 测试结果（self-check 修复后）**：
+    - Spine: 85% → 58%（从灾难级降到接近目标）
+    - 19 spine / 14 branch（之前 17/3）
+
+- **Embedding-Based Anchor Resolution**
+  - 新增 `_split_sentences(text)` — 基于正则的句子分割，保留 `(start_char, end_char, text)`
+  - 新增 `_embedding_resolve()` — batch encode anchors + sentences，cosine similarity top-1 匹配
+  - 使用 `sentence-transformers/all-MiniLM-L6-v2`（384d，本地模型，lazy load）
+  - **Cascade 重构**：
+    - 删除 `_try_prefix_words`（conf=0.6）— 只匹配前 3 个词，造成 81% 的 mismatch
+    - 收紧 `_try_normalized` 的回映射 — 从 3-word prefix 提升到 8-word prefix
+    - 新 cascade: `exact(1.0) → case-insensitive(0.9) → normalized(0.8) → exact-no-order(0.75) → embedding(0.3-0.7) → failed(0.0)`
+  - **Stats 升级**：输出分为 `exact / text-fuzzy / embedding / failed` 四档
+  - **Batchnorm 首测结果**：embedding fallback resolved 21/21 failed anchors → 0 failed
+  - **质量审计发现**：虽然 0 failed，但 48% 的 fuzzy match 指向错误位置
+    - TEXT conf=0.80 的 ~14% 准确
+    - EMB conf<0.75 的 ~18% 准确
+    - 根因：`_try_normalized` 的 3-word 回映射跟删掉的 prefix match 是同一个 bug pattern
+
+### Decisions Made
+- **动态约束优于自然语言指导** — "avoid flat lists" 太模糊，LLM 用具体数字（spine 24-37）效果好得多
+- **Spine 定义用否定测试** — "删掉会断吗？" 比 "advance the narrative" 更严格
+- **删除 prefix match** — 前 3 个词匹配太激进，是假阳性的最大来源
+- **Embedding 接管所有 non-exact match** — text-based fuzzy（prefix、normalized 回映射）质量太差
+
+### Next
+- [ ] 继续改善 embedding anchor 质量 — 当前准确率仍低，可能需要 sliding window 或用 content 字段做匹配
+- [ ] 考虑用 segment.content（LLM 摘要）做 embedding 匹配而非 anchor 短语
+- [ ] 全量重跑 10 篇论文，验证 tree constraints + embedding anchor 的整体改善
+- [ ] 开始 App 前端开发
+
+---
+
 ## 2026-02-27
 
 ### Completed
