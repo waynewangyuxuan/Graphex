@@ -54,7 +54,6 @@ Quick links:
 - [Technical Architecture](META/Core/Technical.md)
 - [Narrative Schema](META/Research/Narrative_Schema.md)
 - [Current Progress](META/Progress.md)
-- [Change Log](CHANGELOG.md)
 
 ## Architecture
 
@@ -109,8 +108,7 @@ Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
 ```
 Graphex/
 ├── CLAUDE.md              # This file
-├── CHANGELOG.md           # Release history
-├── META/                  # Documentation
+├── META/                  # Documentation (includes Progress.md)
 │   ├── Core/              # Product, Technical docs
 │   ├── Research/          # Cognitive science research
 │   ├── Decisions/         # ADRs
